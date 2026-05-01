@@ -11,10 +11,11 @@ pub struct AppState {
     pub graph_mouse_state: GraphMouseState,
     pub files: Vec<FileData>,
     pub show_help: bool,
+    pub config_errors: Vec<String>,
 }
 
 impl AppState {
-    pub fn new(config: &GrafConfig, files: Vec<FileData>) -> Self {
+    pub fn new(config: &GrafConfig, files: Vec<FileData>, config_errors: Vec<String>) -> Self {
         let (graph, _total_edges) = crate::graph::build_graph(&files, config);
         let simulation = crate::graph::create_simulation(graph, config);
         let mut graph_state = crate::graph::GraphState {
@@ -41,6 +42,7 @@ impl AppState {
             graph_mouse_state: GraphMouseState::default(),
             files,
             show_help: false,
+            config_errors,
         }
     }
 

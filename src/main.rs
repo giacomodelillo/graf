@@ -52,6 +52,7 @@ impl TerminalGuard {
             EnterAlternateScreen,
             EnableMouseCapture
         )?;
+        self.terminal.clear()?;
         Ok(())
     }
 }
@@ -70,23 +71,10 @@ impl Drop for TerminalGuard {
 }
 
 fn main() -> Result<()> {
-    let config = config::GrafConfig::load();
+    let (config, mut config_errors) = config::GrafConfig::load();
 
     // Startup config validation check
-    let config_errors = config.validate();
-    if !config_errors.is_empty() {
-        eprintln!("Config errors found:");
-        for err in &config_errors {
-            eprintln!("  - {}", err);
-        }
-        eprintln!(
-            "Fix config at: {}",
-            config::GrafConfig::config_path()
-                .unwrap_or_default()
-                .display()
-        );
-        eprintln!("Using default values for invalid options.");
-    }
+    config_errors.extend(config.validate());
 
     let cwd = std::env::current_dir().context("failed to get current directory")?;
     let files = linker::scan_markdown_files(
@@ -101,7 +89,7 @@ fn main() -> Result<()> {
     }
 
     let mut guard = TerminalGuard::new()?;
-    let mut app_state = app::AppState::new(&config, files);
+    let mut app_state = app::AppState::new(&config, files, config_errors);
     let mut running = true;
 
     while running {
@@ -112,6 +100,10 @@ fn main() -> Result<()> {
         if event::poll(std::time::Duration::from_millis(16))? {
             match event::read()? {
                 Event::Key(key) => {
+                    if !app_state.config_errors.is_empty() {
+                        app_state.config_errors.clear();
+                        continue;
+                    }
                     if app_state.show_help {
                         if key.kind == event::KeyEventKind::Press
                             && (key.code == crossterm::event::KeyCode::Esc

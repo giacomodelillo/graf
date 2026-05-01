@@ -11,11 +11,8 @@ use serde::{Deserialize, Serialize};
 pub enum Theme {
     #[default]
     Default,
-    #[serde(alias = "tokyo-night")]
     TokyoNight,
-    #[serde(alias = "catppuccin-mocha")]
     CatppuccinMocha,
-    #[serde(alias = "one-dark")]
     Onedark,
     Gruvbox,
     Dracula,
@@ -29,14 +26,14 @@ impl FromStr for Theme {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "default" => Ok(Theme::Default),
-            "tokyo-night" | "tokyonight" => Ok(Theme::TokyoNight),
-            "catppuccin-mocha" | "catppuccinmocha" => Ok(Theme::CatppuccinMocha),
-            "one-dark" | "onedark" => Ok(Theme::Onedark),
+            "tokyonight" => Ok(Theme::TokyoNight),
+            "catppuccinmocha" => Ok(Theme::CatppuccinMocha),
+            "onedark" => Ok(Theme::Onedark),
             "gruvbox" => Ok(Theme::Gruvbox),
             "dracula" => Ok(Theme::Dracula),
             "nord" => Ok(Theme::Nord),
-            "solarized-light" | "solarizedlight" => Ok(Theme::SolarizedLight),
-            "solarized-dark" | "solarizeddark" => Ok(Theme::SolarizedDark),
+            "solarizedlight" => Ok(Theme::SolarizedLight),
+            "solarizeddark" => Ok(Theme::SolarizedDark),
             _ => Err(format!("Unknown theme: {}", s)),
         }
     }
@@ -735,19 +732,19 @@ impl GrafConfig {
         errs
     }
 
-    pub fn load() -> Self {
+    pub fn load() -> (Self, Vec<String>) {
         let config_path = Self::config_path();
         let mut config = Self::default();
-        let mut load_err = None;
+        let mut errors = Vec::new();
 
         if let Ok(path) = &config_path {
             if path.exists() {
                 match fs::read_to_string(path) {
                     Ok(content) => match toml::from_str::<GrafConfig>(&content) {
                         Ok(loaded) => config = loaded,
-                        Err(e) => load_err = Some(format!("Invalid config TOML: {}", e)),
+                        Err(e) => errors.push(format!("Invalid config TOML: {}", e)),
                     },
-                    Err(e) => load_err = Some(format!("Cannot read config file: {}", e)),
+                    Err(e) => errors.push(format!("Cannot read config file: {}", e)),
                 }
             }
         }
@@ -755,11 +752,7 @@ impl GrafConfig {
         // Apply env overrides after file load
         config.apply_env_overrides();
 
-        if let Some(err) = load_err {
-            eprintln!("Config warning: {}", err);
-        }
-
-        config
+        (config, errors)
     }
 
     fn apply_env_overrides(&mut self) {

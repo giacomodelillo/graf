@@ -446,7 +446,33 @@ pub fn draw_graph_view(frame: &mut ratatui::Frame, state: &GraphState, config: &
             .selected_node
             .and_then(|idx| graph.node_weight(idx))
             .map(|n| n.data.title.clone());
-        let status = config.expand_status(node_count, edge_count, selected_info.as_deref());
+
+        let (viewport_size_pct, viewport_ratio) = {
+            let (gx_min, gx_max, gy_min, gy_max) = compute_graph_bounds(graph);
+            let graph_w = gx_max - gx_min;
+            let graph_h = gy_max - gy_min;
+            let vp_w = x_bounds[1] - x_bounds[0];
+            let vp_h = y_bounds[1] - y_bounds[0];
+            let graph_area = graph_w * graph_h;
+            let vp_area = vp_w * vp_h;
+            let size_pct = if graph_area > 0.0 {
+                (vp_area / graph_area * 100.0).clamp(0.0, 100.0)
+            } else {
+                100.0
+            };
+            let range = graph_w.max(graph_h).max(1.0) * 1.4;
+            let full_zoom = 200.0 / range;
+            let ratio = viewport.zoom / full_zoom;
+            (size_pct, ratio)
+        };
+
+        let status = config.expand_status(
+            node_count,
+            edge_count,
+            selected_info.as_deref(),
+            Some(viewport_size_pct),
+            Some(viewport_ratio),
+        );
 
         let status_bar = ratatui::widgets::Paragraph::new(status)
             .style(ratatui::style::Style::default().fg(colors.status_bar_color));
@@ -461,6 +487,7 @@ pub fn draw_graph_view(frame: &mut ratatui::Frame, state: &GraphState, config: &
 
     if config.visual.show_minimap {
         let minimap_area = compute_minimap_area(area, config);
+        frame.render_widget(ratatui::widgets::Clear, minimap_area);
         draw_minimap(
             frame,
             minimap_area,
@@ -596,7 +623,7 @@ fn draw_minimap(
                 .borders(ratatui::widgets::Borders::ALL)
                 .border_style(ratatui::style::Style::default().fg(colors.minimap_border_color)),
         )
-        .marker(ratatui::symbols::Marker::Braille)
+        .marker(ratatui::symbols::Marker::HalfBlock)
         .paint(move |ctx| {
             if let Some(bg) = bg_color {
                 ctx.draw(&Rectangle {

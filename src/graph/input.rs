@@ -50,6 +50,16 @@ pub fn handle_graph_keys(
                 .auto_fit_from_graph(guard.simulation.get_graph());
             guard.viewport = vp;
         }
+        crossterm::event::KeyCode::Char('/') => {
+            return Some("search".to_string());
+        }
+        crossterm::event::KeyCode::Char('f')
+            if key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL) =>
+        {
+            return Some("search".to_string());
+        }
         crossterm::event::KeyCode::Char('?') => {
             return Some("help".to_string());
         }

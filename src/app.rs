@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::sync::RwLock;
 
+use fdg_sim::petgraph::graph::NodeIndex;
+
 use crate::config::GrafConfig;
 use crate::graph::input::GraphMouseState;
 use crate::linker::FileData;
@@ -12,6 +14,10 @@ pub struct AppState {
     pub files: Vec<FileData>,
     pub show_help: bool,
     pub config_errors: Vec<String>,
+    pub search_active: bool,
+    pub search_query: String,
+    pub search_results: Vec<(NodeIndex, String)>,
+    pub search_selected: usize,
 }
 
 impl AppState {
@@ -43,6 +49,10 @@ impl AppState {
             files,
             show_help: false,
             config_errors,
+            search_active: false,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            search_selected: 0,
         }
     }
 

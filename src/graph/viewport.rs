@@ -109,6 +109,11 @@ impl Viewport {
         }
     }
 
+    pub fn center_on_node(&mut self, x: f32, y: f32) {
+        self.center_x = x as f64;
+        self.center_y = y as f64;
+    }
+
     pub fn hit_test(
         &self,
         world_x: f64,

@@ -420,7 +420,7 @@ fn default_double_click() -> u64 {
     300
 }
 fn default_pan_sensitivity() -> f64 {
-    0.2
+    0.0667
 }
 fn default_zoom_factor() -> f64 {
     1.15
@@ -732,7 +732,14 @@ impl GrafConfig {
         title
     }
 
-    pub fn expand_status(&self, files: usize, links: usize, selected: Option<&str>) -> String {
+    pub fn expand_status(
+        &self,
+        files: usize,
+        links: usize,
+        selected: Option<&str>,
+        viewport_size_pct: Option<f64>,
+        viewport_ratio: Option<f64>,
+    ) -> String {
         let fmt = self
             .display
             .status_format
@@ -741,6 +748,19 @@ impl GrafConfig {
         let fmt = fmt.replace("{files}", &files.to_string());
         let fmt = fmt.replace("{links}", &links.to_string());
         let fmt = fmt.replace("{selected}", selected.unwrap_or("none"));
+        let fmt = fmt.replace(
+            "{date}",
+            &chrono::Local::now().format("%Y-%m-%d").to_string(),
+        );
+        let fmt = fmt.replace(
+            "{time}",
+            &chrono::Local::now().format("%H:%M:%S").to_string(),
+        );
+        let fmt = fmt.replace(
+            "{size}",
+            &format!("{:.0}%", viewport_size_pct.unwrap_or(0.0).clamp(0.0, 100.0)),
+        );
+        let fmt = fmt.replace("{ratio}", &format!("{:.1}x", viewport_ratio.unwrap_or(1.0)));
         fmt
     }
 

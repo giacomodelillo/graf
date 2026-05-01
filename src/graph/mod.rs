@@ -97,6 +97,31 @@ pub fn build_graph(
     (graph, total_edges)
 }
 
+pub fn search_nodes(sim: &Simulation<GraphNodeData, ()>, query: &str) -> Vec<(NodeIndex, String)> {
+    if query.is_empty() {
+        return Vec::new();
+    }
+    let q = query.to_lowercase();
+    let graph = sim.get_graph();
+    let mut results: Vec<(NodeIndex, String)> = graph
+        .node_indices()
+        .filter_map(|idx| {
+            let node = &graph[idx];
+            let title_match = node.data.title.to_lowercase().contains(&q);
+            let path_match = node.data.relative_path.to_lowercase().contains(&q);
+            let tag_match = node.data.tags.iter().any(|t| t.to_lowercase().contains(&q));
+            if title_match || path_match || tag_match {
+                Some((idx, node.data.title.clone()))
+            } else {
+                None
+            }
+        })
+        .collect();
+    results.sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()));
+    results.truncate(20);
+    results
+}
+
 pub fn create_simulation(
     graph: ForceGraph<GraphNodeData, ()>,
     config: &GrafConfig,

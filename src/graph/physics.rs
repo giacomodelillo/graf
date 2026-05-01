@@ -24,6 +24,18 @@ pub fn start_physics(
             let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
             guard.simulation.update(0.016);
 
+            // If a node is being dragged, override its location to the drag target
+            if let Some((tx, ty)) = guard.drag_target {
+                if let Some(idx) = guard.dragging_node {
+                    let graph = guard.simulation.get_graph_mut();
+                    if let Some(node) = graph.node_weight_mut(idx) {
+                        node.location.x = tx;
+                        node.location.y = ty;
+                        node.velocity = fdg_sim::glam::Vec3::ZERO;
+                    }
+                }
+            }
+
             if gravity > 0.0 {
                 let graph = guard.simulation.get_graph_mut();
                 for node in graph.node_weights_mut() {

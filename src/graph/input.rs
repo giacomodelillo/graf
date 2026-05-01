@@ -96,9 +96,9 @@ pub fn handle_graph_mouse(
                 guard.viewport.hit_test(wx, wy, &guard)
             };
 
-            let is_double_click = mouse_state
-                .last_click_time
-                .is_some_and(|t| t.elapsed().as_millis() < config.interaction.double_click_ms);
+            let is_double_click = mouse_state.last_click_time.is_some_and(|t| {
+                t.elapsed().as_millis() < config.interaction.double_click_ms as u128
+            });
 
             if let Some(node_idx) = hit {
                 let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
@@ -154,6 +154,7 @@ pub fn handle_graph_mouse(
                         node.location.y = wy as f32;
                         node.velocity = fdg_sim::glam::Vec3::ZERO;
                     }
+                    guard.drag_target = Some((wx as f32, wy as f32));
                     guard.is_settled = false;
                 }
                 mouse_state.drag_origin = Some((mouse_event.column, mouse_event.row));
@@ -163,6 +164,7 @@ pub fn handle_graph_mouse(
             {
                 let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
                 guard.dragging_node = None;
+                guard.drag_target = None;
             }
             mouse_state.drag_origin = None;
             mouse_state.is_panning = false;

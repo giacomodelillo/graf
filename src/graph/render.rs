@@ -2,50 +2,26 @@ use std::collections::{HashMap, HashSet};
 
 use fdg_sim::petgraph::graph::NodeIndex;
 use fdg_sim::petgraph::visit::{EdgeRef, IntoEdgeReferences};
+use ratatui::layout::Rect;
 use ratatui::style::Color;
-use ratatui::widgets::canvas::{Canvas, Line, Painter, Shape};
+use ratatui::widgets::canvas::{Canvas, Line, Painter, Rectangle, Shape};
 use ratatui::widgets::BorderType;
 
-use super::GraphState;
 use crate::config::{
     EdgeColorMode, GrafConfig, LabelMode, LegendPosition, NodeColorMode, NodeSizeMode,
 };
+use crate::graph::viewport::Viewport;
+use crate::graph::GraphState;
 
-fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
-    let h = h / 360.0;
-    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
-    let x = c * (1.0 - ((h * 6.0) % 2.0 - 1.0).abs());
-    let m = l - c / 2.0;
-    let (r, g, b) = match (h * 6.0) as u8 {
-        0 => (c, x, 0.0),
-        1 => (x, c, 0.0),
-        2 => (0.0, c, x),
-        3 => (0.0, x, c),
-        4 => (x, 0.0, c),
-        _ => (c, 0.0, x),
-    };
-    (
-        ((r + m) * 255.0).round() as u8,
-        ((g + m) * 255.0).round() as u8,
-        ((b + m) * 255.0).round() as u8,
-    )
-}
-
-fn golden_ratio_hash(s: &str) -> f64 {
-    let golden = 0.618033988749895;
-    let hash: u32 = s
+fn tag_color(tag: &str, index: usize, _total: usize, palette: &[Color]) -> Color {
+    let palette_len = palette.len();
+    if palette_len == 0 {
+        return Color::Gray;
+    }
+    let hash = tag
         .bytes()
         .fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
-    (hash as f64 * golden) % 1.0
-}
-
-fn tag_color(tag: &str, index: usize, total: usize) -> Color {
-    let hue_spread = 360.0 / total as f64;
-    let base_hue = (index as f64) * hue_spread;
-    let perturbation = golden_ratio_hash(tag) * hue_spread * 0.5 - hue_spread * 0.25;
-    let hue = (base_hue + perturbation + 360.0) % 360.0;
-    let (r, g, b) = hsl_to_rgb(hue, 0.75, 0.55);
-    Color::Rgb(r, g, b)
+    palette[((hash as usize) + index * 7) % palette_len]
 }
 
 fn link_count_color(count: usize, max_count: usize, colors: &[Color]) -> Color {
@@ -194,8 +170,41 @@ pub fn draw_graph_view(frame: &mut ratatui::Frame, state: &GraphState, config: &
         unique_tags
             .into_iter()
             .enumerate()
-            .map(|(i, tag)| (tag.clone(), tag_color(&tag, i, total)))
+            .map(|(i, tag)| (tag.clone(), tag_color(&tag, i, total, &colors.node_colors)))
             .collect()
+    };
+
+    let folder_colors: HashMap<String, Color> = {
+        let mut unique_folders: HashSet<String> = HashSet::new();
+        for node in graph.node_weights() {
+            unique_folders.insert(node.data.folder.clone());
+        }
+        let mut unique_folders: Vec<String> = unique_folders.into_iter().collect();
+        unique_folders.sort();
+        let total = unique_folders.len().max(1);
+        unique_folders
+            .into_iter()
+            .enumerate()
+            .map(|(i, f)| (f.clone(), tag_color(&f, i, total, &colors.node_colors)))
+            .collect()
+    };
+
+    // Prepare legend data if needed
+    let legend_data: Option<Vec<(String, Color)>> = if config.visual.show_legend {
+        let items = match config.visual.node_color_mode {
+            NodeColorMode::Folder => &folder_colors,
+            _ => &tag_colors,
+        };
+        if items.is_empty() {
+            None
+        } else {
+            let mut sorted: Vec<_> = items.iter().collect();
+            sorted.sort_by_key(|(t, _)| t.as_str());
+            sorted.truncate(config.legend.max_items);
+            Some(sorted.into_iter().map(|(t, c)| (t.clone(), *c)).collect())
+        }
+    } else {
+        None
     };
 
     let mut node_own_color: HashMap<NodeIndex, Color> = HashMap::new();
@@ -211,6 +220,10 @@ pub fn draw_graph_view(frame: &mut ratatui::Frame, state: &GraphState, config: &
                         Color::Gray
                     }
                 }
+                NodeColorMode::Folder => folder_colors
+                    .get(&node.data.folder)
+                    .copied()
+                    .unwrap_or(Color::Gray),
                 NodeColorMode::LinkCount => {
                     link_count_color(node.data.link_count, max_link_count, &colors.node_colors)
                 }
@@ -332,12 +345,21 @@ pub fn draw_graph_view(frame: &mut ratatui::Frame, state: &GraphState, config: &
         crate::config::BorderStyle::None => BorderType::Plain,
     };
 
-    let block = ratatui::widgets::Block::default()
-        .borders(ratatui::widgets::Borders::ALL)
-        .border_type(border_type)
-        .border_style(ratatui::style::Style::default().fg(colors.border_color))
-        .title(config.expand_border_title())
-        .title_style(ratatui::style::Style::default().fg(colors.title_color));
+    let block = {
+        let b = ratatui::widgets::Block::default();
+        if matches!(
+            config.display.border_style,
+            crate::config::BorderStyle::None
+        ) {
+            b
+        } else {
+            b.borders(ratatui::widgets::Borders::ALL)
+                .border_type(border_type)
+                .border_style(ratatui::style::Style::default().fg(colors.border_color))
+                .title(config.expand_border_title())
+                .title_style(ratatui::style::Style::default().fg(colors.title_color))
+        }
+    };
 
     let canvas = Canvas::default()
         .x_bounds(x_bounds)
@@ -345,6 +367,17 @@ pub fn draw_graph_view(frame: &mut ratatui::Frame, state: &GraphState, config: &
         .block(block)
         .marker(ratatui::symbols::Marker::Braille)
         .paint(move |ctx| {
+            if let Some(bg) = colors.background_color {
+                let width = x_bounds[1] - x_bounds[0];
+                let height = y_bounds[1] - y_bounds[0];
+                ctx.draw(&Rectangle {
+                    x: x_bounds[0],
+                    y: y_bounds[0],
+                    width,
+                    height,
+                    color: bg,
+                });
+            }
             if config.visual.show_grid {
                 draw_grid(ctx, x_bounds, y_bounds, colors.grid_color);
             }
@@ -363,20 +396,51 @@ pub fn draw_graph_view(frame: &mut ratatui::Frame, state: &GraphState, config: &
                 );
                 ctx.print(label.x, label.y, span);
             }
-
-            if config.visual.show_legend && !tag_colors.is_empty() {
-                draw_legend(
-                    ctx,
-                    &tag_colors,
-                    config.legend.max_items,
-                    config.legend.position.clone(),
-                    x_bounds,
-                    y_bounds,
-                );
-            }
         });
 
     frame.render_widget(canvas, area);
+
+    // Draw legend overlay if data exists
+    if let Some(ref items) = legend_data {
+        let max_len = items.iter().map(|(t, _)| t.len()).max().unwrap_or(0);
+        let legend_width = (max_len + 4) as u16;
+        let legend_height = (items.len() as u16).min(config.legend.max_items as u16) + 2;
+        let (legend_x, legend_y) = match config.legend.position {
+            LegendPosition::TopLeft => (area.x + 1, area.y + 1),
+            LegendPosition::TopRight => (
+                area.x + area.width.saturating_sub(legend_width + 1),
+                area.y + 1,
+            ),
+            LegendPosition::BottomLeft => (
+                area.x + 1,
+                area.y + area.height.saturating_sub(legend_height + 1),
+            ),
+            LegendPosition::BottomRight => (
+                area.x + area.width.saturating_sub(legend_width + 1),
+                area.y + area.height.saturating_sub(legend_height + 1),
+            ),
+        };
+        let legend_area =
+            ratatui::layout::Rect::new(legend_x, legend_y, legend_width, legend_height);
+        let legend_text: Vec<ratatui::text::Line> = items
+            .iter()
+            .map(|(t, c)| {
+                ratatui::text::Line::from(vec![
+                    ratatui::text::Span::styled("● ", ratatui::style::Style::default().fg(*c)),
+                    ratatui::text::Span::styled(
+                        t.clone(),
+                        ratatui::style::Style::default().fg(colors.label_color),
+                    ),
+                ])
+            })
+            .collect();
+        let legend_widget = ratatui::widgets::Paragraph::new(legend_text).block(
+            ratatui::widgets::Block::default()
+                .borders(ratatui::widgets::Borders::ALL)
+                .border_style(ratatui::style::Style::default().fg(colors.border_color)),
+        );
+        frame.render_widget(legend_widget, legend_area);
+    }
 
     if config.display.show_status_bar {
         let selected_info = state
@@ -423,50 +487,6 @@ fn draw_grid(ctx: &mut ratatui::widgets::canvas::Context, x: [f64; 2], y: [f64; 
             y2: py,
             color,
         });
-    }
-}
-
-fn draw_legend(
-    ctx: &mut ratatui::widgets::canvas::Context<'_>,
-    tag_colors: &HashMap<String, Color>,
-    max_items: usize,
-    position: LegendPosition,
-    x_bounds: [f64; 2],
-    y_bounds: [f64; 2],
-) {
-    let mut sorted: Vec<_> = tag_colors.iter().collect();
-    sorted.sort_by_key(|(t, _)| t.clone());
-    sorted.truncate(max_items);
-
-    if sorted.is_empty() {
-        return;
-    }
-
-    let width = sorted.iter().map(|(t, _)| t.len()).max().unwrap_or(0) + 3;
-    let height = sorted.len() as f64 * 1.5 + 2.0;
-
-    let (start_x, start_y) = match position {
-        LegendPosition::TopLeft => (x_bounds[0] + 2.0, y_bounds[1] - 2.0),
-        LegendPosition::TopRight => (x_bounds[1] - width as f64 * 2.0 - 2.0, y_bounds[1] - 2.0),
-        LegendPosition::BottomLeft => (x_bounds[0] + 2.0, y_bounds[0] + height + 2.0),
-        LegendPosition::BottomRight => (
-            x_bounds[1] - width as f64 * 2.0 - 2.0,
-            y_bounds[0] + height + 2.0,
-        ),
-    };
-
-    for (i, (tag, color)) in sorted.iter().enumerate() {
-        let dot_y = start_y - i as f64 * 1.5;
-        ctx.draw(&Line {
-            x1: start_x,
-            y1: dot_y,
-            x2: start_x + 1.0,
-            y2: dot_y,
-            color: **color,
-        });
-        let text = tag.as_str().to_string();
-        let span = ratatui::text::Span::raw(text);
-        ctx.print(start_x + 1.5, dot_y - 0.5, span);
     }
 }
 

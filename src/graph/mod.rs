@@ -4,6 +4,7 @@ pub mod render;
 pub mod viewport;
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use fdg_sim::petgraph::graph::NodeIndex;
 use fdg_sim::{ForceGraph, ForceGraphHelper, Simulation, SimulationParameters};
@@ -16,6 +17,21 @@ pub struct GraphNodeData {
     pub title: String,
     pub tags: Vec<String>,
     pub link_count: usize,
+    pub folder: String,
+}
+
+fn folder_from_path(relative_path: &str) -> String {
+    Path::new(relative_path)
+        .parent()
+        .and_then(|p| {
+            let s = p.to_string_lossy();
+            if s.is_empty() {
+                None
+            } else {
+                Some(s.to_string())
+            }
+        })
+        .unwrap_or_else(|| "(root)".to_string())
 }
 
 pub struct GraphState {
@@ -23,6 +39,7 @@ pub struct GraphState {
     pub viewport: viewport::Viewport,
     pub selected_node: Option<NodeIndex>,
     pub dragging_node: Option<NodeIndex>,
+    pub drag_target: Option<(f32, f32)>,
     pub is_settled: bool,
 }
 
@@ -57,6 +74,7 @@ pub fn build_graph(
             title: file.title.clone(),
             tags: file.tags.clone(),
             link_count: lc,
+            folder: folder_from_path(&file.relative_path),
         };
         let idx = graph.add_force_node(&file.relative_path, data);
         path_to_index.insert(file.relative_path.clone(), idx);

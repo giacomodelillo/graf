@@ -22,6 +22,7 @@ impl AppState {
             simulation,
             selected_node: None,
             dragging_node: None,
+            drag_target: None,
             is_settled: false,
         };
         let vp = graph_state
@@ -41,5 +42,12 @@ impl AppState {
             files,
             show_help: false,
         }
+    }
+
+    pub fn shutdown(&mut self) {
+        if let Some(kill_tx) = self.graph_kill_tx.take() {
+            let _ = kill_tx.send(());
+        }
+        self.graph_state = None;
     }
 }

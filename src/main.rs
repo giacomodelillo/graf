@@ -5,6 +5,7 @@ mod linker;
 mod ui;
 
 use std::io;
+use std::io::Write;
 
 use anyhow::{Context, Result};
 use crossterm::{
@@ -14,8 +15,78 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
+struct TerminalGuard {
+    terminal: Terminal<CrosstermBackend<io::Stdout>>,
+}
+
+impl TerminalGuard {
+    fn new() -> Result<Self> {
+        enable_raw_mode()?;
+        let mut stdout = io::stdout();
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+        let backend = CrosstermBackend::new(stdout);
+        let terminal = Terminal::new(backend)?;
+        Ok(Self { terminal })
+    }
+
+    fn as_mut(&mut self) -> &mut Terminal<CrosstermBackend<io::Stdout>> {
+        &mut self.terminal
+    }
+
+    fn suspend(&mut self) -> Result<()> {
+        disable_raw_mode()?;
+        execute!(
+            self.terminal.backend_mut(),
+            LeaveAlternateScreen,
+            DisableMouseCapture
+        )?;
+        self.terminal.show_cursor()?;
+        io::stdout().flush()?;
+        Ok(())
+    }
+
+    fn resume(&mut self) -> Result<()> {
+        enable_raw_mode()?;
+        execute!(
+            self.terminal.backend_mut(),
+            EnterAlternateScreen,
+            EnableMouseCapture
+        )?;
+        Ok(())
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(
+            self.terminal.backend_mut(),
+            LeaveAlternateScreen,
+            DisableMouseCapture
+        );
+        let _ = self.terminal.show_cursor();
+        let _ = io::stdout().flush();
+    }
+}
+
 fn main() -> Result<()> {
     let config = config::GrafConfig::load();
+
+    // Startup config validation check
+    let config_errors = config.validate();
+    if !config_errors.is_empty() {
+        eprintln!("Config errors found:");
+        for err in &config_errors {
+            eprintln!("  - {}", err);
+        }
+        eprintln!(
+            "Fix config at: {}",
+            config::GrafConfig::config_path()
+                .unwrap_or_default()
+                .display()
+        );
+        eprintln!("Using default values for invalid options.");
+    }
 
     let cwd = std::env::current_dir().context("failed to get current directory")?;
     let files = linker::scan_markdown_files(
@@ -29,12 +100,12 @@ fn main() -> Result<()> {
         std::process::exit(1);
     }
 
-    let mut terminal = setup_terminal()?;
+    let mut guard = TerminalGuard::new()?;
     let mut app_state = app::AppState::new(&config, files);
     let mut running = true;
 
     while running {
-        terminal.draw(|frame| {
+        guard.as_mut().draw(|frame| {
             ui::draw_ui(frame, &app_state, &config);
         })?;
 
@@ -56,11 +127,16 @@ fn main() -> Result<()> {
                             graph::input::handle_graph_keys(graph_state, key, &config)
                         {
                             match action.as_str() {
-                                "quit" => running = false,
+                                "quit" => {
+                                    app_state.shutdown();
+                                    running = false;
+                                }
                                 "help" => app_state.show_help = true,
                                 _ if action.starts_with("open:") => {
                                     let path = &action[5..];
+                                    guard.suspend()?;
                                     open_file_in_editor(path);
+                                    guard.resume()?;
                                 }
                                 _ => {}
                             }
@@ -75,14 +151,16 @@ fn main() -> Result<()> {
                         if let Some(action) = graph::input::handle_graph_mouse(
                             graph_state,
                             mouse_event,
-                            frame_area(&terminal)?,
+                            frame_area(&guard)?,
                             &mut app_state.graph_mouse_state,
                             &config,
                         ) {
                             match action.as_str() {
                                 _ if action.starts_with("open:") => {
                                     let path = &action[5..];
+                                    guard.suspend()?;
                                     open_file_in_editor(path);
+                                    guard.resume()?;
                                 }
                                 _ => {}
                             }
@@ -94,33 +172,15 @@ fn main() -> Result<()> {
         }
     }
 
-    restore_terminal(terminal)?;
     Ok(())
 }
 
-fn frame_area(terminal: &Terminal<CrosstermBackend<io::Stdout>>) -> Result<ratatui::layout::Rect> {
-    let size = terminal.size().context("failed to get terminal size")?;
+fn frame_area(guard: &TerminalGuard) -> Result<ratatui::layout::Rect> {
+    let size = guard
+        .terminal
+        .size()
+        .context("failed to get terminal size")?;
     Ok(ratatui::layout::Rect::new(0, 0, size.width, size.height))
-}
-
-fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let terminal = Terminal::new(backend)?;
-    Ok(terminal)
-}
-
-fn restore_terminal(mut terminal: Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
-    Ok(())
 }
 
 fn open_file_in_editor(relative_path: &str) {
@@ -128,16 +188,5 @@ fn open_file_in_editor(relative_path: &str) {
     let full_path = cwd.join(relative_path);
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
 
-    let _ = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(format!(
-            "{} {}",
-            editor,
-            shell_escape(&full_path.to_string_lossy())
-        ))
-        .status();
-}
-
-fn shell_escape(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
+    let _ = std::process::Command::new(&editor).arg(&full_path).status();
 }

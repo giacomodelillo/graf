@@ -222,8 +222,16 @@ pub struct VisualConfig {
     pub edge_thickness: u16,
     #[serde(default = "default_true")]
     pub show_legend: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub show_grid: bool,
+    #[serde(default = "default_true")]
+    pub show_minimap: bool,
+    #[serde(default)]
+    pub minimap_position: LegendPosition,
+    #[serde(default = "default_minimap_width")]
+    pub minimap_width: u16,
+    #[serde(default = "default_minimap_height")]
+    pub minimap_height: u16,
 }
 
 impl Default for VisualConfig {
@@ -240,6 +248,10 @@ impl Default for VisualConfig {
             edge_thickness: default_edge_thickness(),
             show_legend: default_true(),
             show_grid: false,
+            show_minimap: default_true(),
+            minimap_position: LegendPosition::default(),
+            minimap_width: default_minimap_width(),
+            minimap_height: default_minimap_height(),
         }
     }
 }
@@ -422,6 +434,12 @@ fn default_max_nodes() -> usize {
 fn default_max_legend_items() -> usize {
     10
 }
+fn default_minimap_width() -> u16 {
+    24
+}
+fn default_minimap_height() -> u16 {
+    12
+}
 
 pub struct ThemeColors {
     pub node_colors: Vec<Color>,
@@ -435,6 +453,9 @@ pub struct ThemeColors {
     pub grid_color: Color,
     pub background_color: Option<Color>,
     pub status_bar_color: Color,
+    pub minimap_border_color: Color,
+    pub minimap_viewport_color: Color,
+    pub minimap_bg_color: Option<Color>,
 }
 
 impl GrafConfig {
@@ -470,6 +491,9 @@ impl GrafConfig {
                     Background::Solid => Some(Color::Reset),
                 },
                 status_bar_color: Color::DarkGray,
+                minimap_border_color: Color::DarkGray,
+                minimap_viewport_color: Color::White,
+                minimap_bg_color: None,
             },
             Theme::TokyoNight => ThemeColors {
                 node_colors: vec![
@@ -495,6 +519,9 @@ impl GrafConfig {
                     Background::Solid => Some(Color::Rgb(26, 27, 38)),
                 },
                 status_bar_color: Color::Rgb(86, 95, 137),
+                minimap_border_color: Color::Rgb(86, 95, 137),
+                minimap_viewport_color: Color::Rgb(255, 255, 255),
+                minimap_bg_color: Some(Color::Rgb(26, 27, 38)),
             },
             Theme::Gruvbox => ThemeColors {
                 node_colors: vec![
@@ -520,6 +547,9 @@ impl GrafConfig {
                     Background::Solid => Some(Color::Rgb(40, 40, 40)),
                 },
                 status_bar_color: Color::Rgb(102, 92, 84),
+                minimap_border_color: Color::Rgb(102, 92, 84),
+                minimap_viewport_color: Color::Rgb(251, 241, 199),
+                minimap_bg_color: Some(Color::Rgb(40, 40, 40)),
             },
             Theme::Dracula => ThemeColors {
                 node_colors: vec![
@@ -545,6 +575,9 @@ impl GrafConfig {
                     Background::Solid => Some(Color::Rgb(40, 42, 54)),
                 },
                 status_bar_color: Color::Rgb(98, 114, 164),
+                minimap_border_color: Color::Rgb(98, 114, 164),
+                minimap_viewport_color: Color::Rgb(255, 255, 255),
+                minimap_bg_color: Some(Color::Rgb(40, 42, 54)),
             },
             Theme::Nord => ThemeColors {
                 node_colors: vec![
@@ -570,6 +603,9 @@ impl GrafConfig {
                     Background::Solid => Some(Color::Rgb(46, 52, 64)),
                 },
                 status_bar_color: Color::Rgb(67, 76, 94),
+                minimap_border_color: Color::Rgb(67, 76, 94),
+                minimap_viewport_color: Color::Rgb(236, 239, 244),
+                minimap_bg_color: Some(Color::Rgb(46, 52, 64)),
             },
             Theme::SolarizedLight => ThemeColors {
                 node_colors: vec![
@@ -595,6 +631,9 @@ impl GrafConfig {
                     Background::Solid => Some(Color::Rgb(253, 246, 227)),
                 },
                 status_bar_color: Color::Rgb(88, 110, 117),
+                minimap_border_color: Color::Rgb(88, 110, 117),
+                minimap_viewport_color: Color::Rgb(0, 0, 0),
+                minimap_bg_color: Some(Color::Rgb(253, 246, 227)),
             },
             Theme::SolarizedDark => ThemeColors {
                 node_colors: vec![
@@ -620,6 +659,9 @@ impl GrafConfig {
                     Background::Solid => Some(Color::Rgb(0, 43, 54)),
                 },
                 status_bar_color: Color::Rgb(147, 161, 161),
+                minimap_border_color: Color::Rgb(147, 161, 161),
+                minimap_viewport_color: Color::Rgb(253, 246, 227),
+                minimap_bg_color: Some(Color::Rgb(0, 43, 54)),
             },
             Theme::CatppuccinMocha => ThemeColors {
                 node_colors: vec![
@@ -645,6 +687,9 @@ impl GrafConfig {
                     Background::Solid => Some(Color::Rgb(30, 30, 46)),
                 },
                 status_bar_color: Color::Rgb(108, 112, 134),
+                minimap_border_color: Color::Rgb(108, 112, 134),
+                minimap_viewport_color: Color::Rgb(205, 214, 244),
+                minimap_bg_color: Some(Color::Rgb(30, 30, 46)),
             },
             Theme::Onedark => ThemeColors {
                 node_colors: vec![
@@ -670,6 +715,9 @@ impl GrafConfig {
                     Background::Solid => Some(Color::Rgb(40, 44, 52)),
                 },
                 status_bar_color: Color::Rgb(92, 99, 112),
+                minimap_border_color: Color::Rgb(92, 99, 112),
+                minimap_viewport_color: Color::Rgb(220, 223, 228),
+                minimap_bg_color: Some(Color::Rgb(40, 44, 52)),
             },
         }
     }
@@ -790,6 +838,10 @@ impl GrafConfig {
         apply_val!("VISUAL_EDGE_THICKNESS", self.visual.edge_thickness, u16);
         apply_val!("VISUAL_SHOW_LEGEND", self.visual.show_legend, bool);
         apply_val!("VISUAL_SHOW_GRID", self.visual.show_grid, bool);
+        apply_val!("VISUAL_SHOW_MINIMAP", self.visual.show_minimap, bool);
+        apply_enum!("VISUAL_MINIMAP_POSITION", self.visual.minimap_position);
+        apply_val!("VISUAL_MINIMAP_WIDTH", self.visual.minimap_width, u16);
+        apply_val!("VISUAL_MINIMAP_HEIGHT", self.visual.minimap_height, u16);
         apply_val!("PHYSICS_IDEAL_DISTANCE", self.physics.ideal_distance, f64);
         apply_val!("PHYSICS_DAMPING", self.physics.damping, f32);
         apply_val!("PHYSICS_MAX_ITERATIONS", self.physics.max_iterations, usize);

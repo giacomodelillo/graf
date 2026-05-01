@@ -12,7 +12,6 @@ use crate::config::{
 };
 use crate::graph::viewport::Viewport;
 use crate::graph::GraphState;
-
 fn tag_color(tag: &str, index: usize, _total: usize, palette: &[Color]) -> Color {
     let palette_len = palette.len();
     if palette_len == 0 {
@@ -459,6 +458,18 @@ pub fn draw_graph_view(frame: &mut ratatui::Frame, state: &GraphState, config: &
         );
         frame.render_widget(status_bar, status_area);
     }
+
+    if config.visual.show_minimap {
+        let minimap_area = compute_minimap_area(area, config);
+        draw_minimap(
+            frame,
+            minimap_area,
+            viewport,
+            graph,
+            &node_own_color,
+            &colors,
+        );
+    }
 }
 
 fn radius_for_node(nodes: &[NodeRenderData], idx: NodeIndex) -> f64 {
@@ -500,4 +511,149 @@ fn truncate_owned(s: &str, max_len: usize) -> String {
         }
         format!("{}…", &s[..end])
     }
+}
+
+pub fn compute_minimap_area(frame_area: Rect, config: &GrafConfig) -> Rect {
+    let w = config.visual.minimap_width;
+    let h = config.visual.minimap_height;
+    let (x, y) = match config.visual.minimap_position {
+        LegendPosition::TopLeft => (frame_area.x + 1, frame_area.y + 1),
+        LegendPosition::TopRight => (
+            frame_area.x + frame_area.width.saturating_sub(w + 1),
+            frame_area.y + 1,
+        ),
+        LegendPosition::BottomLeft => (
+            frame_area.x + 1,
+            frame_area.y + frame_area.height.saturating_sub(h + 1),
+        ),
+        LegendPosition::BottomRight => (
+            frame_area.x + frame_area.width.saturating_sub(w + 1),
+            frame_area.y + frame_area.height.saturating_sub(h + 1),
+        ),
+    };
+    Rect::new(x, y, w, h)
+}
+
+pub fn compute_graph_bounds(
+    graph: &fdg_sim::ForceGraph<super::GraphNodeData, ()>,
+) -> (f64, f64, f64, f64) {
+    let mut min_x = f64::MAX;
+    let mut max_x = f64::MIN;
+    let mut min_y = f64::MAX;
+    let mut max_y = f64::MIN;
+
+    for node in graph.node_weights() {
+        let x = node.location.x as f64;
+        let y = node.location.y as f64;
+        min_x = min_x.min(x);
+        max_x = max_x.max(x);
+        min_y = min_y.min(y);
+        max_y = max_y.max(y);
+    }
+
+    if min_x == f64::MAX {
+        min_x = -100.0;
+        max_x = 100.0;
+        min_y = -100.0;
+        max_y = 100.0;
+    }
+
+    let pad_x = (max_x - min_x) * 0.1 + 1.0;
+    let pad_y = (max_y - min_y) * 0.1 + 1.0;
+    (min_x - pad_x, max_x + pad_x, min_y - pad_y, max_y + pad_y)
+}
+
+fn draw_minimap(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    viewport: &Viewport,
+    graph: &fdg_sim::ForceGraph<super::GraphNodeData, ()>,
+    node_colors: &HashMap<NodeIndex, Color>,
+    colors: &crate::config::ThemeColors,
+) {
+    let (wx_min, wx_max, wy_min, wy_max) = compute_graph_bounds(graph);
+    let aspect = area.width as f64 / area.height as f64;
+    let vp_x = viewport.x_bounds(aspect);
+    let vp_y = viewport.y_bounds(aspect);
+
+    let nodes_clone: Vec<(f64, f64, Color)> = graph
+        .node_indices()
+        .filter_map(|idx| {
+            let node = &graph[idx];
+            let color = node_colors.get(&idx).copied().unwrap_or(Color::Gray);
+            Some((node.location.x as f64, node.location.y as f64, color))
+        })
+        .collect();
+
+    let vp_color = colors.minimap_viewport_color;
+    let bg_color = colors.minimap_bg_color;
+
+    let canvas = Canvas::default()
+        .x_bounds([wx_min, wx_max])
+        .y_bounds([wy_min, wy_max])
+        .block(
+            ratatui::widgets::Block::default()
+                .borders(ratatui::widgets::Borders::ALL)
+                .border_style(ratatui::style::Style::default().fg(colors.minimap_border_color)),
+        )
+        .marker(ratatui::symbols::Marker::Braille)
+        .paint(move |ctx| {
+            if let Some(bg) = bg_color {
+                ctx.draw(&Rectangle {
+                    x: wx_min,
+                    y: wy_min,
+                    width: wx_max - wx_min,
+                    height: wy_max - wy_min,
+                    color: bg,
+                });
+            }
+
+            for (nx, ny, nc) in &nodes_clone {
+                ctx.draw(&Rectangle {
+                    x: *nx - 0.5,
+                    y: *ny - 0.5,
+                    width: 1.0,
+                    height: 1.0,
+                    color: *nc,
+                });
+            }
+
+            let vx1 = vp_x[0].max(wx_min);
+            let vx2 = vp_x[1].min(wx_max);
+            let vy1 = vp_y[0].max(wy_min);
+            let vy2 = vp_y[1].min(wy_max);
+
+            if vx1 < vx2 && vy1 < vy2 {
+                ctx.draw(&Line {
+                    x1: vx1,
+                    y1: vy1,
+                    x2: vx2,
+                    y2: vy1,
+                    color: vp_color,
+                });
+                ctx.draw(&Line {
+                    x1: vx1,
+                    y1: vy2,
+                    x2: vx2,
+                    y2: vy2,
+                    color: vp_color,
+                });
+                ctx.draw(&Line {
+                    x1: vx1,
+                    y1: vy1,
+                    x2: vx1,
+                    y2: vy2,
+                    color: vp_color,
+                });
+                ctx.draw(&Line {
+                    x1: vx2,
+                    y1: vy1,
+                    x2: vx2,
+                    y2: vy2,
+                    color: vp_color,
+                });
+            }
+        });
+
+    frame.render_widget(canvas, area);
 }

@@ -1,0 +1,98 @@
+pub mod input;
+pub mod physics;
+pub mod render;
+pub mod viewport;
+
+use std::collections::HashMap;
+
+use fdg_sim::petgraph::graph::NodeIndex;
+use fdg_sim::{ForceGraph, ForceGraphHelper, Simulation, SimulationParameters};
+
+use crate::config::GrafConfig;
+use crate::linker::{resolve_links, FileData};
+
+pub struct GraphNodeData {
+    pub relative_path: String,
+    pub title: String,
+    pub tags: Vec<String>,
+    pub link_count: usize,
+}
+
+pub struct GraphState {
+    pub simulation: Simulation<GraphNodeData, ()>,
+    pub viewport: viewport::Viewport,
+    pub selected_node: Option<NodeIndex>,
+    pub dragging_node: Option<NodeIndex>,
+    pub is_settled: bool,
+}
+
+pub fn build_graph(
+    files: &[FileData],
+    config: &GrafConfig,
+) -> (ForceGraph<GraphNodeData, ()>, usize) {
+    let links = resolve_links(files, &config.filter.exclude_tags);
+    let mut graph: ForceGraph<GraphNodeData, ()> = ForceGraph::default();
+    let mut path_to_index: HashMap<String, NodeIndex> = HashMap::new();
+
+    let filtered: Vec<&FileData> = files
+        .iter()
+        .filter(|f| {
+            config.filter.exclude_tags.is_empty()
+                || f.tags
+                    .iter()
+                    .all(|t| !config.filter.exclude_tags.contains(t))
+        })
+        .filter(|f| {
+            let lc = links.get(&f.relative_path).map(|v| v.len()).unwrap_or(0);
+            lc >= config.filter.min_links
+        })
+        .collect();
+
+    let total_edges: usize = links.values().map(|v| v.len()).sum();
+
+    for file in &filtered {
+        let lc = links.get(&file.relative_path).map(|v| v.len()).unwrap_or(0);
+        let data = GraphNodeData {
+            relative_path: file.relative_path.clone(),
+            title: file.title.clone(),
+            tags: file.tags.clone(),
+            link_count: lc,
+        };
+        let idx = graph.add_force_node(&file.relative_path, data);
+        path_to_index.insert(file.relative_path.clone(), idx);
+    }
+
+    for (source, targets) in &links {
+        if let Some(&source_idx) = path_to_index.get(source) {
+            for target in targets {
+                if let Some(&target_idx) = path_to_index.get(target) {
+                    if source_idx != target_idx
+                        && graph.edges_connecting(source_idx, target_idx).count() == 0
+                    {
+                        graph.add_edge(source_idx, target_idx, ());
+                    }
+                }
+            }
+        }
+    }
+
+    (graph, total_edges)
+}
+
+pub fn create_simulation(
+    graph: ForceGraph<GraphNodeData, ()>,
+    config: &GrafConfig,
+) -> Simulation<GraphNodeData, ()> {
+    let force = fdg_sim::force::handy(
+        config.physics.ideal_distance as f32,
+        config.physics.damping,
+        true,
+        true,
+    );
+    let params = SimulationParameters::new(
+        config.physics.max_iterations as f32,
+        fdg_sim::Dimensions::Two,
+        force,
+    );
+    Simulation::from_graph(graph, params)
+}

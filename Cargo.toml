@@ -1,0 +1,17 @@
+[package]
+name = "graf"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+fdg-sim = "0.9"
+petgraph = "0.6"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+once_cell = "1"
+regex = "1"
+directories = "5"
+anyhow = "1"
+glob = "0.3"

@@ -228,7 +228,7 @@ const PALETTES: [ThemePalette; 10] = [
         title: [131, 148, 150],
         text: [131, 148, 150],
         fg: [253, 246, 227],
-        grid: [0, 43, 54],
+        grid: [0, 74, 94], // Lighter than bg (0, 43, 54) for visibility
         bg: [0, 43, 54],
     },
 ];

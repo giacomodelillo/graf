@@ -40,6 +40,7 @@ A terminal-based force-directed graph visualizer for markdown wikilinks. Run `gr
 
 **Overlays**
 
+- **Minimap** - toggleable minimap that shows the entire canvas.
 - **Status bar** — template-based with variables: `{files}`, `{links}`, `{selected}`, `{date}`, `{time}`, `{size}`, `{ratio}`.
 - **Legend** — shows tag or folder color mapping; configurable position and max items.
 - **Grid overlay** — configurable number of divisions per axis.
@@ -49,10 +50,10 @@ A terminal-based force-directed graph visualizer for markdown wikilinks. Run `gr
 
 ## Installation
 
-### Cargo
-
 ### Debian, Fedora, Arch Linux
 Refer to the [releases](https://github.com/reekta92/graf/releases) page for the latest release.
+
+### Cargo
 
 ```bash
 cargo install graf-rs
@@ -136,24 +137,6 @@ Press `f` to activate the search popup. Search matches against node titles, file
 | `Ctrl+A` / `Ctrl+E` | Move to start/end of query |
 | `Ctrl+U` | Clear entire query |
 | `Ctrl+W` | Delete word backward |
-
-- - -
-
-## Comparison with Obsidian's Graph View
-
-Obsidian's [graph view](https://help.obsidian.md/Plugins/Graph+view) was the direct inspiration for this project. Both share core capabilities: force-directed layout, node drag, pan/zoom, wikilink parsing, frontmatter tags, and search. The table below highlights where they differ:
-
-| | Obsidian Graph View | graf |
-|---|---|---|
-| Platform | GUI (Electron desktop app) | Terminal (any emulator, SSH, tmux) |
-| Input | Mouse | Mouse + full keyboard navigation |
-| Node coloring | Tag (via community plugins) | Tag, folder, link count, uniform (built-in) |
-| Node shapes | Circle only | Circle, square, diamond |
-| Minimap | No | Yes (interactive, 4 positions) |
-| Label modes | Hover to show | Selected, neighbors, all, none |
-| Config | GUI settings | TOML file + CLI flags + env vars |
-| Editor | Built-in Obsidian editor | Any `$EDITOR` (vim, nvim, helix, etc.) |
-| Live file watching | Yes | Manual refresh (`r`) |
 
 - - -
 
@@ -418,14 +401,29 @@ Format: `GRAF_{SECTION}_{KEY}` in all caps with underscores.
 | `"kanagawa"` | Kanagawa palette |
 | `"solarized"` | Solarized Dark palette |
 
-### Default theme behavior
-
-When `theme = "default"`, nodes use `Color::Reset` which maps to your terminal's default foreground color. The legend and labels use `Gray` and `DarkGray` for contrast. This mode is designed to blend seamlessly with your existing terminal colorscheme.
-
 ### Background modes
 
 - `"transparent"` — The canvas background is not drawn, allowing your terminal's background (including transparency effects) to show through.
 - `"solid"` — The canvas background is filled with the theme's configured background color. Only relevant when using a non-default theme.
+
+- - -
+
+## Comparison with Obsidian's Graph View
+
+Obsidian's [graph view](https://help.obsidian.md/Plugins/Graph+view) was the direct inspiration for this project. Both share core capabilities: force-directed layout, node drag, pan/zoom, wikilink parsing, frontmatter tags, and search. The table below highlights where they differ:
+
+| | Obsidian Graph View | graf |
+|---|---|---|
+| Platform | GUI (Electron desktop app) | Terminal (any emulator, SSH, tmux) |
+| Input | Mouse | Mouse + full keyboard navigation |
+| Node coloring | Tag (via community plugins) | Tag, folder, link count, uniform (built-in) |
+| Node shapes | Circle only | Circle, square, diamond |
+| Minimap | No | Yes (interactive, 4 positions) |
+| Label modes | Hover to show | Selected, neighbors, all, none |
+| Config | GUI settings | TOML file + CLI flags + env vars |
+| Editor | Built-in Obsidian editor | Any `$EDITOR` (vim, nvim, helix, etc.) |
+| Live file watching | Yes | Manual refresh (`r`) |
+
 
 - - -
 

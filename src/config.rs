@@ -466,7 +466,7 @@ impl Default for VisualConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PhysicsConfig {
     #[serde(default = "default_ideal_distance")]
     pub ideal_distance: f64,
@@ -550,7 +550,7 @@ impl Default for DisplayConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FilterConfig {
     #[serde(default)]
     pub exclude_tags: Vec<String>,
@@ -890,6 +890,31 @@ impl GrafConfig {
         config.apply_env_overrides();
 
         (config, errors, created)
+    }
+
+    pub fn reload_from_path(path: Option<&PathBuf>) -> (Self, Vec<String>) {
+        let mut config = Self::default();
+        let mut errors = Vec::new();
+
+        if let Some(path) = path {
+            if path.exists() {
+                match fs::read_to_string(path) {
+                    Ok(content) => match toml::from_str::<GrafConfig>(&content) {
+                        Ok(loaded) => config = loaded,
+                        Err(e) => errors.push(format!("Invalid config TOML: {}", e)),
+                    },
+                    Err(e) => errors.push(format!("Cannot read config file: {}", e)),
+                }
+            } else {
+                errors.push(format!("Config file not found: {}", path.display()));
+            }
+        } else {
+            errors.push("No config file path available".to_string());
+        }
+
+        config.apply_env_overrides();
+
+        (config, errors)
     }
 
     fn apply_env_overrides(&mut self) {

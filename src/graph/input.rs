@@ -18,6 +18,7 @@ pub enum GraphAction {
     ToggleLegend,
     ToggleGrid,
     ToggleStatus,
+    ReloadConfig,
     Refresh,
 }
 
@@ -27,6 +28,8 @@ pub fn handle_graph_keys(
     config: &GrafConfig,
 ) -> Option<GraphAction> {
     let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
+
+    let ctrl = key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL);
 
     match key.code {
         crossterm::event::KeyCode::Esc | crossterm::event::KeyCode::Char('q') => {
@@ -62,6 +65,9 @@ pub fn handle_graph_keys(
                 config.interaction.auto_fit_padding,
             );
             guard.viewport = vp;
+        }
+        crossterm::event::KeyCode::Char('r') if ctrl => {
+            return Some(GraphAction::ReloadConfig);
         }
         crossterm::event::KeyCode::Char('r') => {
             return Some(GraphAction::Refresh);

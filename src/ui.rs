@@ -31,6 +31,10 @@ pub fn draw_ui(frame: &mut Frame, state: &AppState, config: &GrafConfig) {
     if state.search_active {
         draw_search(frame, area, state, config);
     }
+
+    if let Some(ref msg) = state.config_reload_msg {
+        draw_reload_notification(frame, area, msg, config);
+    }
 }
 
 fn draw_config_errors(frame: &mut Frame, area: Rect, errors: &[String], config: &GrafConfig) {
@@ -113,6 +117,7 @@ fn draw_help(frame: &mut Frame, area: Rect, config: &GrafConfig) {
         "  Shift+g     Toggle grid",
         "  Shift+s     Toggle status bar",
         "  r           Refresh simulation",
+        "  Ctrl+r      Reload config",
         "  ?           Toggle help",
         "  q/Esc       Quit",
         "",
@@ -234,5 +239,33 @@ fn draw_search(frame: &mut Frame, area: Rect, state: &AppState, config: &GrafCon
         .border_style(ratatui::style::Style::default().fg(colors.border_color));
 
     let paragraph = ratatui::widgets::Paragraph::new(lines).block(block);
+    frame.render_widget(paragraph, popup_area);
+}
+
+fn draw_reload_notification(frame: &mut Frame, area: Rect, msg: &str, config: &GrafConfig) {
+    let colors = config.theme_colors();
+    let width = (msg.len() as u16 + 4).min(area.width);
+    let height = 3u16;
+    let x = (area.width.saturating_sub(width)) / 2;
+    let y = area.height.saturating_sub(height) / 2;
+
+    let popup_area = ratatui::layout::Rect::new(x, y, width, height);
+
+    let is_error = msg.starts_with("Config error");
+    let fg = if is_error {
+        ratatui::style::Color::Red
+    } else {
+        colors.label_color
+    };
+
+    let paragraph = ratatui::widgets::Paragraph::new(msg)
+        .style(ratatui::style::Style::default().fg(fg))
+        .alignment(ratatui::layout::Alignment::Center)
+        .block(
+            ratatui::widgets::Block::default()
+                .borders(ratatui::widgets::Borders::ALL)
+                .border_style(ratatui::style::Style::default().fg(colors.border_color)),
+        );
+
     frame.render_widget(paragraph, popup_area);
 }

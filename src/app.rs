@@ -23,6 +23,8 @@ pub struct AppState {
     pub show_legend: bool,
     pub show_grid: bool,
     pub show_status_bar: bool,
+    pub config_reload_msg: Option<String>,
+    pub config_reload_ttl: u8,
 }
 
 impl AppState {
@@ -48,6 +50,8 @@ impl AppState {
             show_legend: config.visual.show_legend,
             show_grid: config.visual.show_grid,
             show_status_bar: config.display.show_status_bar,
+            config_reload_msg: None,
+            config_reload_ttl: 0,
         }
     }
 

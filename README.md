@@ -46,6 +46,12 @@ EDITOR=nvim graf
 | `-` | Zoom out |
 | `Enter` | Open selected file in editor |
 | `a` | Auto-fit view to all nodes |
+| `f` | Activate search |
+| `r` | Refresh file scan |
+| `Shift+M` | Toggle minimap |
+| `Shift+L` | Toggle legend |
+| `Shift+G` | Toggle grid |
+| `Shift+S` | Toggle status bar |
 | `?` | Toggle help overlay |
 | `q` / `Esc` | Quit |
 
@@ -59,6 +65,22 @@ EDITOR=nvim graf
 | Single click | Select node |
 | Double-click | Open file in editor |
 | Double-click empty area | Deselect node |
+
+## Search
+
+Press `f` to activate the search popup. Search matches against node titles, file paths (relative), and tags (case-insensitive).
+
+### Search controls
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Select result and jump to node |
+| `↑` `↓` | Navigate results |
+| `Tab` / `Shift+Tab` | Cycle forward/backward |
+| `Esc` | Close search |
+| `Ctrl+A` / `Ctrl+E` | Move to start/end of query |
+| `Ctrl+U` | Clear entire query |
+| `Ctrl+W` | Delete word backward |
 
 ## Configuration
 
@@ -162,6 +184,7 @@ command = ""
 | `minimap_width` | int | `30` | Minimap width in columns |
 | `minimap_height` | int | `12` | Minimap height in rows |
 | `canvas_marker` | string | `"braille"` | Canvas rendering marker: `"braille"`, `"halfblock"`, `"dot"` |
+| `minimap_marker` | string | `"braille"` | Minimap rendering marker: `"braille"`, `"halfblock"`, `"dot"` |
 | `node_shape` | string | `"circle"` | Node shape: `"circle"`, `"square"`, `"diamond"` |
 | `label_offset` | float | `4.0` | Distance between node edge and label |
 | `grid_divisions` | int | `10` | Number of grid lines per axis (2–50) |
@@ -213,7 +236,7 @@ Controls the force-directed layout simulation.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `show_status_bar` | bool | `true` | Show the status bar at the bottom |
-| `status_format` | string | `"Files: {files} \| Links: {links} \| Selected: {selected}"` | Status bar text template. Variables: `{files}`, `{links}`, `{selected}` |
+| `status_format` | string | `"Files: {files} \| Links: {links} \| Selected: {selected}"` | Status bar text template. Variables: `{files}`, `{links}`, `{selected}`, `{date}`, `{time}`, `{size}`, `{ratio}` |
 | `border_style` | string | `"rounded"` | Border style: `"plain"`, `"rounded"`, `"double"`, `"none"` |
 | `border_title` | string | `"graf"` | Window title. Supports `{cwd}` variable (current directory name) |
 
@@ -278,6 +301,24 @@ Options:
 
 CLI arguments override config file values, which override defaults.
 
+## Environment variables
+
+Config values can be overridden with `GRAF_*` environment variables (uppercase, underscores):
+
+```bash
+GRAF_VISUAL_THEME="dracula" GRAF_FILTER_MAX_NODES=200 graf
+```
+
+Common variables:
+- `GRAF_VISUAL_THEME` — Theme preset
+- `GRAF_EDITOR_COMMAND` — Editor command
+- `GRAF_FILTER_MAX_NODES` — Maximum nodes
+- `GRAF_FILTER_MIN_LINKS` — Minimum links threshold
+- `GRAF_VISUAL_NODE_COLOR_MODE` — Node color mode
+- `GRAF_DISPLAY_SHOW_STATUS_BAR` — Show status bar (true/false)
+
+Format: `GRAF_{SECTION}_{KEY}` in all caps with underscores.
+
 ## Themes
 
 ### Presets
@@ -291,6 +332,8 @@ CLI arguments override config file values, which override defaults.
 | `"nord"` | Nord Frost palette |
 | `"catppuccin-mocha"` | Catppuccin Mocha palette |
 | `"onedark"` | One Dark palette |
+| `"solarized-light"` | Solarized Light palette |
+| `"solarized-dark"` | Solarized Dark palette |
 
 ### Default theme behavior
 
@@ -350,6 +393,9 @@ The `TerminalGuard` RAII struct ensures the terminal is always properly restored
 | `toml` + `serde` | Configuration loading |
 | `clap` | CLI argument parsing |
 | `glob` | File discovery |
+| `chrono` | Date/time formatting for status bar |
+| `once_cell` | Lazy regex initialization |
+| `directories` | XDG config path resolution |
 
 ## Project structure
 
@@ -371,6 +417,22 @@ graf/
         ├── viewport.rs  # Pan, zoom, screen-to-world conversion, hit-testing
         └── physics.rs   # Background thread for force simulation
 ```
+
+## Performance
+
+- Simulation runs at ~60fps (default `thread_sleep_ms = 16`)
+- Simulation auto-stops when total energy drops below `0.05 * node_count`
+- Files are sorted alphabetically by path before graph construction
+- Max zoom: ~20x initial; Min zoom: 0.01 (hardcoded floor)
+
+## Edge cases
+
+- **Empty directory**: Exits with error "No markdown files found"
+- **Self-links**: Filtered out automatically
+- **Unresolved wikilinks**: Silently ignored
+- **Title fallback**: Frontmatter → first `# heading` → filename stem
+- **Nodes without tags**: Default to `Color::Gray` in tag mode
+- **Config errors**: Invalid values show popup with valid suggestions
 
 ## License
 

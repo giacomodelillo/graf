@@ -1141,6 +1141,9 @@ impl GrafConfig {
                     },
                     Err(e) => errors.push(format!("Cannot read config file: {}", e)),
                 }
+            } else if let Some(parent) = path.parent() {
+                let _ = fs::create_dir_all(parent);
+                let _ = fs::write(&path, generate_default_toml());
             }
         }
 
@@ -1255,4 +1258,109 @@ impl GrafConfig {
             self.editor.command = s;
         }
     }
+}
+
+fn generate_default_toml() -> String {
+    r##"# graf configuration
+# Edit values below to customize. Restart graf to apply changes.
+
+[visual]
+# Theme: "default", "tokyo_night", "catppuccin_mocha", "onedark", "gruvbox", "dracula", "nord", "solarized_light", "solarized_dark"
+theme = "default"
+# Background: "transparent", "solid"
+background = "transparent"
+# Node color mode: "tag", "folder", "link_count", "uniform"
+node_color_mode = "tag"
+# Edge color mode: "source", "target", "uniform"
+edge_color_mode = "source"
+# Label display: "selected", "neighbors", "all", "none"
+label_mode = "selected"
+# Max label length (1-60)
+label_max_length = 20
+# Base node radius (1.0-5.0)
+node_size = 2.0
+# Node size mode: "fixed", "link_count"
+node_size_mode = "fixed"
+# Edge thickness (1-3)
+edge_thickness = 1
+show_legend = true
+show_grid = false
+show_minimap = true
+# Minimap corner: "top_right", "top_left", "bottom_right", "bottom_left"
+minimap_position = "top_right"
+minimap_width = 24
+minimap_height = 12
+# Main canvas marker: "braille", "half_block", "dot"
+canvas_marker = "braille"
+# Minimap marker: "braille", "half_block", "dot"
+minimap_marker = "braille"
+# Node shape: "circle", "square", "diamond"
+node_shape = "circle"
+# Distance between node center and label
+label_offset = 4.0
+# Number of grid lines per axis
+grid_divisions = 10
+
+# Color overrides (hex, applied on top of theme). Uncomment to override theme defaults.
+[visual.colors]
+# node_color = "#ff6600"
+# edge_color = "#445566"
+# label_color = "#aabbcc"
+# selection_ring_color = "#ff00ff"
+# border_color = "#334455"
+# title_color = "#66ffcc"
+# grid_color = "#222233"
+# legend_text_color = "#ccddee"
+# status_bar_color = "#556677"
+# background_color = "#1a1a2e"
+
+[physics]
+ideal_distance = 80.0
+damping = 0.95
+max_iterations = 800
+gravity = 0.01
+cooling = true
+prevent_overlapping = true
+timestep = 0.016
+thread_sleep_ms = 16
+
+[interaction]
+double_click_ms = 300
+# Must be > 0
+zoom_factor = 1.15
+drag_sensitivity = 1.0
+auto_fit_padding = 1.4
+drag_scale = 200.0
+
+[display]
+show_status_bar = true
+# Status format placeholders: {files} {links} {selected} {date} {time} {size} {ratio}
+# status_format = "{files} files | {links} links | {selected}"
+# Border: "plain", "rounded", "double", "none"
+border_style = "rounded"
+# Title placeholders: {cwd}
+border_title = "graf"
+
+[filter]
+# exclude_tags = ["draft", "private"]
+# exclude_patterns = ["templates/", "private/"]
+min_links = 0
+max_nodes = 500
+
+[legend]
+# Position: "top_right", "top_left", "bottom_right", "bottom_left"
+position = "top_right"
+max_items = 10
+
+[search]
+max_results = 20
+max_visible = 10
+popup_width = 50
+popup_y = 3
+cursor_glyph = "▎"
+
+[editor]
+# Falls back to $EDITOR then vim if empty
+# command = "nano"
+"##.to_string()
 }

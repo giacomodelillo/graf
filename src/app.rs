@@ -27,22 +27,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: &GrafConfig, files: Vec<FileData>, config_errors: Vec<String>) -> Self {
-        let (graph, _total_edges) = crate::graph::build_graph(&files, config);
-        let simulation = crate::graph::create_simulation(graph, config);
-        let mut graph_state = crate::graph::GraphState {
-            viewport: crate::graph::viewport::Viewport::default(),
-            simulation,
-            selected_node: None,
-            dragging_node: None,
-            drag_target: None,
-            is_settled: false,
-        };
-        let vp = graph_state.viewport.clone().auto_fit_from_graph(
-            graph_state.simulation.get_graph(),
-            config.interaction.auto_fit_padding,
-        );
-        graph_state.viewport = vp;
-
+        let graph_state = crate::graph::GraphState::new(&files, config);
         let state = Arc::new(RwLock::new(graph_state));
         let (kill_tx, kill_rx) = std::sync::mpsc::channel();
         crate::graph::physics::start_physics(state.clone(), config, kill_rx);
@@ -70,21 +55,7 @@ impl AppState {
         if let Some(kill_tx) = self.graph_kill_tx.take() {
             let _ = kill_tx.send(());
         }
-        let (graph, _) = crate::graph::build_graph(&self.files, config);
-        let simulation = crate::graph::create_simulation(graph, config);
-        let mut graph_state = crate::graph::GraphState {
-            viewport: crate::graph::viewport::Viewport::default(),
-            simulation,
-            selected_node: None,
-            dragging_node: None,
-            drag_target: None,
-            is_settled: false,
-        };
-        let vp = graph_state.viewport.clone().auto_fit_from_graph(
-            graph_state.simulation.get_graph(),
-            config.interaction.auto_fit_padding,
-        );
-        graph_state.viewport = vp;
+        let graph_state = crate::graph::GraphState::new(&self.files, config);
         let state = Arc::new(RwLock::new(graph_state));
         let (kill_tx, kill_rx) = std::sync::mpsc::channel();
         crate::graph::physics::start_physics(state.clone(), config, kill_rx);

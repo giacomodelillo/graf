@@ -8,16 +8,29 @@ use super::viewport::CELL_ASPECT;
 use super::GraphState;
 use crate::config::GrafConfig;
 
+#[derive(Debug)]
+pub enum GraphAction {
+    Quit,
+    OpenFile(String),
+    ToggleHelp,
+    ToggleSearch,
+    ToggleMinimap,
+    ToggleLegend,
+    ToggleGrid,
+    ToggleStatus,
+    Refresh,
+}
+
 pub fn handle_graph_keys(
     state: &Arc<RwLock<GraphState>>,
     key: KeyEvent,
     config: &GrafConfig,
-) -> Option<String> {
+) -> Option<GraphAction> {
     let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
 
     match key.code {
         crossterm::event::KeyCode::Esc | crossterm::event::KeyCode::Char('q') => {
-            return Some("quit".to_string());
+            return Some(GraphAction::Quit);
         }
         crossterm::event::KeyCode::Up => {
             select_in_direction(&mut guard, 0.0, 1.0);
@@ -38,11 +51,10 @@ pub fn handle_graph_keys(
             guard.viewport.zoom_out(config.interaction.zoom_factor);
         }
         crossterm::event::KeyCode::Enter => {
-            if let Some(idx) = guard.selected_node {
-                if let Some(node) = guard.simulation.get_graph().node_weight(idx) {
-                    return Some(format!("open:{}", node.data.relative_path));
+            if let Some(idx) = guard.selected_node
+                && let Some(node) = guard.simulation.get_graph().node_weight(idx) {
+                    return Some(GraphAction::OpenFile(node.data.relative_path.clone()));
                 }
-            }
         }
         crossterm::event::KeyCode::Char('a') => {
             let vp = guard.viewport.clone().auto_fit_from_graph(
@@ -52,25 +64,25 @@ pub fn handle_graph_keys(
             guard.viewport = vp;
         }
         crossterm::event::KeyCode::Char('r') => {
-            return Some("refresh".to_string());
+            return Some(GraphAction::Refresh);
         }
         crossterm::event::KeyCode::Char('f') => {
-            return Some("search".to_string());
+            return Some(GraphAction::ToggleSearch);
         }
         crossterm::event::KeyCode::Char('?') => {
-            return Some("help".to_string());
+            return Some(GraphAction::ToggleHelp);
         }
         crossterm::event::KeyCode::Char('M') => {
-            return Some("toggle:minimap".to_string());
+            return Some(GraphAction::ToggleMinimap);
         }
         crossterm::event::KeyCode::Char('L') => {
-            return Some("toggle:legend".to_string());
+            return Some(GraphAction::ToggleLegend);
         }
         crossterm::event::KeyCode::Char('G') => {
-            return Some("toggle:grid".to_string());
+            return Some(GraphAction::ToggleGrid);
         }
         crossterm::event::KeyCode::Char('S') => {
-            return Some("toggle:status".to_string());
+            return Some(GraphAction::ToggleStatus);
         }
         _ => {}
     }
@@ -93,14 +105,14 @@ pub fn handle_graph_mouse(
     area: Rect,
     mouse_state: &mut GraphMouseState,
     config: &GrafConfig,
-) -> Option<String> {
+) -> Option<GraphAction> {
     let minimap_area = if config.visual.show_minimap {
         Some(super::render::compute_minimap_area(area, config))
     } else {
         None
     };
 
-    let in_minimap = minimap_area.map_or(false, |ma| {
+    let in_minimap = minimap_area.is_some_and(|ma| {
         mouse_event.column >= ma.x
             && mouse_event.column < ma.x + ma.width
             && mouse_event.row >= ma.y
@@ -156,12 +168,11 @@ pub fn handle_graph_mouse(
                     mouse_state.is_panning = false;
                     mouse_state.last_clicked_node = Some(node_idx);
 
-                    if is_double_click {
-                        if let Some(node) = guard.simulation.get_graph().node_weight(node_idx) {
+                    if is_double_click
+                        && let Some(node) = guard.simulation.get_graph().node_weight(node_idx) {
                             mouse_state.last_click_time = Some(Instant::now());
-                            return Some(format!("open:{}", node.data.relative_path));
+                            return Some(GraphAction::OpenFile(node.data.relative_path.clone()));
                         }
-                    }
                 } else {
                     let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
                     if is_double_click {
@@ -175,9 +186,7 @@ pub fn handle_graph_mouse(
             }
         }
         MouseEventKind::Drag(MouseButton::Left) => {
-            let Some((orig_col, orig_row)) = mouse_state.drag_origin else {
-                return None;
-            };
+            let (orig_col, orig_row) = mouse_state.drag_origin?;
 
             if mouse_state.is_minimap_dragging {
                 if let Some(ma) = minimap_area {
@@ -247,7 +256,7 @@ pub fn handle_graph_mouse(
 
 fn select_in_direction(guard: &mut GraphState, dx: f64, dy: f64) {
     if guard.selected_node.is_none() {
-        guard.selected_node = guard.viewport.nearest_to_center(&guard);
+        guard.selected_node = guard.viewport.nearest_to_center(guard);
         if let Some(idx) = guard.selected_node {
             let graph = guard.simulation.get_graph();
             let node = &graph[idx];
@@ -268,7 +277,7 @@ fn select_in_direction(guard: &mut GraphState, dx: f64, dy: f64) {
     if let Some(next) =
         guard
             .viewport
-            .nearest_in_direction(&guard, ox, oy, dx, dy, guard.selected_node)
+            .nearest_in_direction(guard, ox, oy, dx, dy, guard.selected_node)
     {
         guard.selected_node = Some(next);
         let graph = guard.simulation.get_graph();
@@ -285,8 +294,7 @@ fn minimap_screen_to_world(
     minimap_area: Rect,
     state: &GraphState,
 ) -> (f64, f64) {
-    let (wx_min, wx_max, wy_min, wy_max) =
-        super::render::compute_graph_bounds(state.simulation.get_graph());
+    let (wx_min, wx_max, wy_min, wy_max) = state.graph_bounds;
     let inner_x = minimap_area.x + 1;
     let inner_y = minimap_area.y + 1;
     let inner_w = minimap_area.width.saturating_sub(2);

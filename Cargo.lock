@@ -412,7 +412,6 @@ dependencies = [
  "directories",
  "fdg-sim",
  "glob",
- "once_cell",
  "petgraph",
  "ratatui",
  "regex",

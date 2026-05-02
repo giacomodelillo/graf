@@ -4,15 +4,6 @@ use ratatui::Frame;
 use crate::app::AppState;
 use crate::config::GrafConfig;
 
-fn border_type_from_config(config: &GrafConfig) -> ratatui::widgets::BorderType {
-    match config.display.border_style {
-        crate::config::BorderStyle::Plain => ratatui::widgets::BorderType::Plain,
-        crate::config::BorderStyle::Rounded => ratatui::widgets::BorderType::Rounded,
-        crate::config::BorderStyle::Double => ratatui::widgets::BorderType::Double,
-        crate::config::BorderStyle::None => ratatui::widgets::BorderType::Plain,
-    }
-}
-
 pub fn draw_ui(frame: &mut Frame, state: &AppState, config: &GrafConfig) {
     let area = frame.area();
 
@@ -64,7 +55,7 @@ fn draw_config_errors(frame: &mut Frame, area: Rect, errors: &[String], config: 
             ratatui::widgets::Block::default()
                 .borders(ratatui::widgets::Borders::ALL)
                 .title("Config Error")
-                .border_type(border_type_from_config(config)),
+                .border_type(config.display.border_style.to_border_type()),
         )
         .alignment(ratatui::layout::Alignment::Left);
 
@@ -83,7 +74,7 @@ fn draw_config_errors(frame: &mut Frame, area: Rect, errors: &[String], config: 
 fn suggest_fix(err: &str) -> Option<String> {
     let err_lower = err.to_lowercase();
     if err_lower.contains("theme") {
-        return Some("Valid themes: default, tokyonight, catppuccinmocha, catppuccinlatte, onedark, onelight, gruvbox, gruvboxlight, dracula, nord, rosepine, everforest, kanagawa, githublight".to_string());
+        return Some("Valid themes: default, tokyonight, catppuccinmocha, onedark, gruvbox, dracula, nord, rosepine, everforest, kanagawa, solarized".to_string());
     }
     if err_lower.contains("background") {
         return Some("Valid backgrounds: transparent, solid".to_string());
@@ -122,7 +113,6 @@ fn draw_help(frame: &mut Frame, area: Rect, config: &GrafConfig) {
         "  Shift+g     Toggle grid",
         "  Shift+s     Toggle status bar",
         "  r           Refresh simulation",
-        "  f           Search nodes",
         "  ?           Toggle help",
         "  q/Esc       Quit",
         "",
@@ -140,7 +130,7 @@ fn draw_help(frame: &mut Frame, area: Rect, config: &GrafConfig) {
             ratatui::widgets::Block::default()
                 .borders(ratatui::widgets::Borders::ALL)
                 .title("Help")
-                .border_type(border_type_from_config(config)),
+                .border_type(config.display.border_style.to_border_type()),
         )
         .alignment(ratatui::layout::Alignment::Left);
 
@@ -229,7 +219,7 @@ fn draw_search(frame: &mut Frame, area: Rect, state: &AppState, config: &GrafCon
                 ratatui::style::Style::default().fg(colors.label_color)
             };
             let prefix = "  ";
-            let display = truncate_display(title, (popup_width as usize).saturating_sub(6));
+            let display = crate::util::truncate(title, (popup_width as usize).saturating_sub(6));
             lines.push(ratatui::text::Line::styled(
                 format!("{}{}", prefix, display),
                 style,
@@ -240,21 +230,9 @@ fn draw_search(frame: &mut Frame, area: Rect, state: &AppState, config: &GrafCon
     let block = ratatui::widgets::Block::default()
         .borders(ratatui::widgets::Borders::ALL)
         .title("Search")
-        .border_type(border_type_from_config(config))
+        .border_type(config.display.border_style.to_border_type())
         .border_style(ratatui::style::Style::default().fg(colors.border_color));
 
     let paragraph = ratatui::widgets::Paragraph::new(lines).block(block);
     frame.render_widget(paragraph, popup_area);
-}
-
-fn truncate_display(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        let mut end = max_len.saturating_sub(1);
-        while !s.is_char_boundary(end) {
-            end -= 1;
-        }
-        format!("{}…", &s[..end])
-    }
 }

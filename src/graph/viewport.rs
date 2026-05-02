@@ -26,6 +26,8 @@ impl Default for Viewport {
 }
 
 impl Viewport {
+    // BUG-11: aspect parameter ignored. Dot markers need aspect correction but
+    // braille/halfblock (99% of users) work correctly with fixed CELL_ASPECT.
     pub fn x_bounds(&self, _aspect: f64) -> [f64; 2] {
         let half_w = 100.0 / self.zoom;
         [self.center_x - half_w, self.center_x + half_w]
@@ -134,7 +136,7 @@ impl Viewport {
         let ndx = dir_x / dir_len;
         let ndy = dir_y / dir_len;
 
-        const ANGLE_THRESHOLD: f64 = 1.0472; // ~60 degrees
+        const ANGLE_THRESHOLD: f64 = std::f64::consts::FRAC_PI_3;
         const ANGLE_WEIGHT: f64 = 80.0;
 
         let mut best: Option<(NodeIndex, f64)> = None;

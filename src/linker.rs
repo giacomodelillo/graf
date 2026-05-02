@@ -1,18 +1,18 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
 use glob::glob;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use regex::Regex;
 
-static WIKILINK_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]").unwrap());
-static FRONTMATTER_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?s)^---\s*\n(.*?)\n---\s*\n").unwrap());
-static TAGS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^tags:\s*\[([^\]]*)\]").unwrap());
-static TITLE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(?m)^title:\s*(?:"([^"]*)"|'([^']*)'|([^\s#]+))"#).unwrap());
+static WIKILINK_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]").unwrap());
+static FRONTMATTER_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)^---\s*\n(.*?)\n---\s*\n").unwrap());
+static TAGS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^tags:\s*\[([^\]]*)\]").unwrap());
+static TITLE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(?m)^title:\s*(?:"([^"]*)"|'([^']*)'|([^\s#]+))"#).unwrap());
 
 #[derive(Debug, Clone)]
 pub struct FileData {
@@ -27,19 +27,16 @@ pub fn scan_markdown_files(
     exclude_patterns: &[String],
     max_nodes: usize,
 ) -> Vec<FileData> {
+    let excluded = resolve_exclude_set(base_dir, exclude_patterns);
     let mut files = Vec::new();
 
-    let patterns = if exclude_patterns.is_empty() {
-        vec!["**/*.md".to_string(), "**/*.mdx".to_string()]
-    } else {
-        vec!["**/*.md".to_string(), "**/*.mdx".to_string()]
-    };
+    let patterns = ["**/*.md", "**/*.mdx"];
 
     for pattern in &patterns {
         let full_pattern = base_dir.join(pattern).to_string_lossy().to_string();
         if let Ok(paths) = glob(&full_pattern) {
             for entry in paths.flatten() {
-                if should_exclude(&entry, base_dir, exclude_patterns) {
+                if should_exclude(&entry, base_dir, exclude_patterns, &excluded) {
                     continue;
                 }
                 if let Ok(data) = parse_markdown_file(&entry, base_dir) {
@@ -57,19 +54,30 @@ pub fn scan_markdown_files(
     files
 }
 
-fn should_exclude(path: &Path, base: &Path, patterns: &[String]) -> bool {
+fn resolve_exclude_set(base_dir: &Path, patterns: &[String]) -> HashSet<std::path::PathBuf> {
+    let mut excluded = HashSet::new();
+    for pat in patterns {
+        if let Ok(paths) = glob(&base_dir.join(pat).to_string_lossy()) {
+            for path in paths.flatten() {
+                excluded.insert(path);
+            }
+        }
+    }
+    excluded
+}
+
+fn should_exclude(
+    path: &Path,
+    base: &Path,
+    patterns: &[String],
+    excluded: &HashSet<std::path::PathBuf>,
+) -> bool {
+    if excluded.contains(path) {
+        return true;
+    }
     if let Ok(rel) = path.strip_prefix(base) {
         let rel_str = rel.to_string_lossy();
         for pat in patterns {
-            if glob::glob(&base.join(pat).to_string_lossy()).is_ok() {
-                if let Ok(g) = glob::glob(&base.join(pat).to_string_lossy()) {
-                    for matched in g.flatten() {
-                        if path == matched {
-                            return true;
-                        }
-                    }
-                }
-            }
             if rel_str.contains(pat) || rel_str.ends_with(pat) {
                 return true;
             }
@@ -112,8 +120,8 @@ fn extract_wikilinks(content: &str) -> Vec<String> {
 fn extract_tags(content: &str) -> Vec<String> {
     if let Some(fm) = FRONTMATTER_RE.captures(content) {
         let fm_content = fm.get(1).unwrap().as_str();
-        if let Some(tags_match) = TAGS_RE.captures(fm_content) {
-            if let Some(tags_str) = tags_match.get(1) {
+        if let Some(tags_match) = TAGS_RE.captures(fm_content)
+            && let Some(tags_str) = tags_match.get(1) {
                 return tags_str
                     .as_str()
                     .split(',')
@@ -121,7 +129,6 @@ fn extract_tags(content: &str) -> Vec<String> {
                     .filter(|t| !t.is_empty())
                     .collect();
             }
-        }
     }
     Vec::new()
 }
@@ -161,13 +168,13 @@ pub fn resolve_links(files: &[FileData], exclude_tags: &[String]) -> HashMap<Str
         if exclude_tags.iter().any(|t| file.tags.contains(t)) {
             continue;
         }
+        let mut seen = HashSet::new();
         let mut targets = Vec::new();
         for link in &file.wikilinks {
-            if let Some(target) = title_to_path.get(&link.to_lowercase()) {
-                if target != &file.relative_path && !targets.contains(target) {
+            if let Some(target) = title_to_path.get(&link.to_lowercase())
+                && target != &file.relative_path && seen.insert(target.clone()) {
                     targets.push(target.clone());
                 }
-            }
         }
         links.insert(file.relative_path.clone(), targets);
     }

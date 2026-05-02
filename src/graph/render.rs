@@ -5,7 +5,6 @@ use fdg_sim::petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::widgets::canvas::{Canvas, Line, Painter, Rectangle, Shape};
-use ratatui::widgets::BorderType;
 
 use crate::config::{
     EdgeColorMode, GrafConfig, LabelMode, LegendPosition, NodeColorMode, NodeShape, NodeSizeMode,
@@ -78,98 +77,108 @@ struct GraphNodesShape {
     nodes: Vec<NodeRenderData>,
 }
 
+fn draw_outlined_shape(
+    painter: &mut Painter,
+    cx: f64,
+    cy: f64,
+    radius: f64,
+    shape: NodeShape,
+    color: Color,
+) {
+    match shape {
+        NodeShape::Circle => {
+            let steps = 16u32;
+            for i in 0..steps {
+                let a1 = (i as f64) * std::f64::consts::TAU / (steps as f64);
+                let a2 = ((i + 1) as f64) * std::f64::consts::TAU / (steps as f64);
+                Line {
+                    x1: cx + radius * a1.cos(),
+                    y1: cy + radius * a1.sin(),
+                    x2: cx + radius * a2.cos(),
+                    y2: cy + radius * a2.sin(),
+                    color,
+                }
+                .draw(painter);
+            }
+        }
+        NodeShape::Square => {
+            Line {
+                x1: cx - radius,
+                y1: cy - radius,
+                x2: cx + radius,
+                y2: cy - radius,
+                color,
+            }
+            .draw(painter);
+            Line {
+                x1: cx + radius,
+                y1: cy - radius,
+                x2: cx + radius,
+                y2: cy + radius,
+                color,
+            }
+            .draw(painter);
+            Line {
+                x1: cx + radius,
+                y1: cy + radius,
+                x2: cx - radius,
+                y2: cy + radius,
+                color,
+            }
+            .draw(painter);
+            Line {
+                x1: cx - radius,
+                y1: cy + radius,
+                x2: cx - radius,
+                y2: cy - radius,
+                color,
+            }
+            .draw(painter);
+        }
+        NodeShape::Diamond => {
+            Line {
+                x1: cx,
+                y1: cy - radius,
+                x2: cx + radius,
+                y2: cy,
+                color,
+            }
+            .draw(painter);
+            Line {
+                x1: cx + radius,
+                y1: cy,
+                x2: cx,
+                y2: cy + radius,
+                color,
+            }
+            .draw(painter);
+            Line {
+                x1: cx,
+                y1: cy + radius,
+                x2: cx - radius,
+                y2: cy,
+                color,
+            }
+            .draw(painter);
+            Line {
+                x1: cx - radius,
+                y1: cy,
+                x2: cx,
+                y2: cy - radius,
+                color,
+            }
+            .draw(painter);
+        }
+    }
+}
+
 impl Shape for GraphNodesShape {
     fn draw(&self, painter: &mut Painter) {
         for node in &self.nodes {
-            let radius = node.radius;
-            match node.shape {
-                NodeShape::Circle => {
-                    let steps = 16u32;
-                    for i in 0..steps {
-                        let a1 = (i as f64) * std::f64::consts::TAU / (steps as f64);
-                        let a2 = ((i + 1) as f64) * std::f64::consts::TAU / (steps as f64);
-                        Line {
-                            x1: node.x + radius * a1.cos(),
-                            y1: node.y + radius * a1.sin(),
-                            x2: node.x + radius * a2.cos(),
-                            y2: node.y + radius * a2.sin(),
-                            color: node.color,
-                        }
-                        .draw(painter);
-                    }
-                }
-                NodeShape::Square => {
-                    Line {
-                        x1: node.x - radius,
-                        y1: node.y - radius,
-                        x2: node.x + radius,
-                        y2: node.y - radius,
-                        color: node.color,
-                    }
-                    .draw(painter);
-                    Line {
-                        x1: node.x + radius,
-                        y1: node.y - radius,
-                        x2: node.x + radius,
-                        y2: node.y + radius,
-                        color: node.color,
-                    }
-                    .draw(painter);
-                    Line {
-                        x1: node.x + radius,
-                        y1: node.y + radius,
-                        x2: node.x - radius,
-                        y2: node.y + radius,
-                        color: node.color,
-                    }
-                    .draw(painter);
-                    Line {
-                        x1: node.x - radius,
-                        y1: node.y + radius,
-                        x2: node.x - radius,
-                        y2: node.y - radius,
-                        color: node.color,
-                    }
-                    .draw(painter);
-                }
-                NodeShape::Diamond => {
-                    Line {
-                        x1: node.x,
-                        y1: node.y - radius,
-                        x2: node.x + radius,
-                        y2: node.y,
-                        color: node.color,
-                    }
-                    .draw(painter);
-                    Line {
-                        x1: node.x + radius,
-                        y1: node.y,
-                        x2: node.x,
-                        y2: node.y + radius,
-                        color: node.color,
-                    }
-                    .draw(painter);
-                    Line {
-                        x1: node.x,
-                        y1: node.y + radius,
-                        x2: node.x - radius,
-                        y2: node.y,
-                        color: node.color,
-                    }
-                    .draw(painter);
-                    Line {
-                        x1: node.x - radius,
-                        y1: node.y,
-                        x2: node.x,
-                        y2: node.y - radius,
-                        color: node.color,
-                    }
-                    .draw(painter);
-                }
-            }
+            draw_outlined_shape(painter, node.x, node.y, node.radius, node.shape, node.color);
 
             let indicator_radius = 1.2;
-            let orbit_radius = radius + 2.5;
+            let orbit_radius = node.radius + 2.5;
             let extra_count = node.extra_tag_colors.len();
             for (i, &color) in node.extra_tag_colors.iter().enumerate() {
                 let angle = (i as f64) * std::f64::consts::TAU / (extra_count as f64)
@@ -192,92 +201,15 @@ impl Shape for GraphNodesShape {
             }
 
             if node.is_selected {
-                let ring_radius = radius + 1.5;
-                match node.shape {
-                    NodeShape::Circle => {
-                        let steps = 16u32;
-                        for i in 0..steps {
-                            let a1 = (i as f64) * std::f64::consts::TAU / (steps as f64);
-                            let a2 = ((i + 1) as f64) * std::f64::consts::TAU / (steps as f64);
-                            Line {
-                                x1: node.x + ring_radius * a1.cos(),
-                                y1: node.y + ring_radius * a1.sin(),
-                                x2: node.x + ring_radius * a2.cos(),
-                                y2: node.y + ring_radius * a2.sin(),
-                                color: node.selection_ring_color,
-                            }
-                            .draw(painter);
-                        }
-                    }
-                    NodeShape::Square => {
-                        Line {
-                            x1: node.x - ring_radius,
-                            y1: node.y - ring_radius,
-                            x2: node.x + ring_radius,
-                            y2: node.y - ring_radius,
-                            color: node.selection_ring_color,
-                        }
-                        .draw(painter);
-                        Line {
-                            x1: node.x + ring_radius,
-                            y1: node.y - ring_radius,
-                            x2: node.x + ring_radius,
-                            y2: node.y + ring_radius,
-                            color: node.selection_ring_color,
-                        }
-                        .draw(painter);
-                        Line {
-                            x1: node.x + ring_radius,
-                            y1: node.y + ring_radius,
-                            x2: node.x - ring_radius,
-                            y2: node.y + ring_radius,
-                            color: node.selection_ring_color,
-                        }
-                        .draw(painter);
-                        Line {
-                            x1: node.x - ring_radius,
-                            y1: node.y + ring_radius,
-                            x2: node.x - ring_radius,
-                            y2: node.y - ring_radius,
-                            color: node.selection_ring_color,
-                        }
-                        .draw(painter);
-                    }
-                    NodeShape::Diamond => {
-                        Line {
-                            x1: node.x,
-                            y1: node.y - ring_radius,
-                            x2: node.x + ring_radius,
-                            y2: node.y,
-                            color: node.selection_ring_color,
-                        }
-                        .draw(painter);
-                        Line {
-                            x1: node.x + ring_radius,
-                            y1: node.y,
-                            x2: node.x,
-                            y2: node.y + ring_radius,
-                            color: node.selection_ring_color,
-                        }
-                        .draw(painter);
-                        Line {
-                            x1: node.x,
-                            y1: node.y + ring_radius,
-                            x2: node.x - ring_radius,
-                            y2: node.y,
-                            color: node.selection_ring_color,
-                        }
-                        .draw(painter);
-                        Line {
-                            x1: node.x - ring_radius,
-                            y1: node.y,
-                            x2: node.x,
-                            y2: node.y - ring_radius,
-                            color: node.selection_ring_color,
-                        }
-                        .draw(painter);
-                    }
-                }
+                let ring_radius = node.radius + 1.5;
+                draw_outlined_shape(
+                    painter,
+                    node.x,
+                    node.y,
+                    ring_radius,
+                    node.shape,
+                    node.selection_ring_color,
+                );
             }
         }
     }
@@ -451,7 +383,7 @@ pub fn draw_graph_view(
                 extra_tag_colors,
                 is_selected: state.selected_node == Some(idx),
                 selection_ring_color: colors.selected_indicator_color,
-                shape: config.visual.node_shape.clone(),
+                shape: config.visual.node_shape,
             }
         })
         .collect();
@@ -488,7 +420,7 @@ pub fn draw_graph_view(
                     y: node.location.y as f64
                         + radius_for_node(&nodes, idx)
                         + config.visual.label_offset,
-                    text: truncate_owned(&node.data.title, config.visual.label_max_length),
+                    text: crate::util::truncate(&node.data.title, config.visual.label_max_length),
                 }
             })
             .collect()
@@ -500,12 +432,7 @@ pub fn draw_graph_view(
     let x_bounds = viewport.x_bounds(aspect);
     let y_bounds = viewport.y_bounds(aspect);
 
-    let border_type = match config.display.border_style {
-        crate::config::BorderStyle::Plain => BorderType::Plain,
-        crate::config::BorderStyle::Rounded => BorderType::Rounded,
-        crate::config::BorderStyle::Double => BorderType::Double,
-        crate::config::BorderStyle::None => BorderType::Plain,
-    };
+    let border_type = config.display.border_style.to_border_type();
 
     let block = {
         let b = ratatui::widgets::Block::default();
@@ -515,17 +442,18 @@ pub fn draw_graph_view(
         ) {
             b
         } else {
-            let mut block = b.borders(ratatui::widgets::Borders::ALL)
+            let mut block = b
+                .borders(ratatui::widgets::Borders::ALL)
                 .border_type(border_type)
                 .border_style(ratatui::style::Style::default().fg(colors.border_color))
                 .title(config.expand_border_title())
                 .title_style(ratatui::style::Style::default().fg(colors.title_color));
-            
+
             // Add background color to block for solid background mode
             if let Some(bg) = colors.background_color {
                 block = block.style(ratatui::style::Style::default().bg(bg));
             }
-            
+
             block
         }
     };
@@ -616,7 +544,7 @@ pub fn draw_graph_view(
             .map(|n| n.data.title.clone());
 
         let (viewport_size_pct, viewport_ratio) = {
-            let (gx_min, gx_max, gy_min, gy_max) = compute_graph_bounds(graph);
+            let (gx_min, gx_max, gy_min, gy_max) = state.graph_bounds;
             let graph_w = gx_max - gx_min;
             let graph_h = gy_max - gy_min;
             let vp_w = x_bounds[1] - x_bounds[0];
@@ -659,11 +587,14 @@ pub fn draw_graph_view(
         draw_minimap(
             frame,
             minimap_area,
-            viewport,
-            graph,
-            &node_own_color,
-            &colors,
-            config,
+            MinimapParams {
+                viewport,
+                graph,
+                node_colors: &node_own_color,
+                colors: &colors,
+                config,
+                graph_bounds: state.graph_bounds,
+            },
         );
     }
 }
@@ -701,18 +632,6 @@ fn draw_grid(
             y2: py,
             color,
         });
-    }
-}
-
-fn truncate_owned(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        let mut end = max_len.saturating_sub(1);
-        while !s.is_char_boundary(end) {
-            end -= 1;
-        }
-        format!("{}…", &s[..end])
     }
 }
 
@@ -766,31 +685,33 @@ pub fn compute_graph_bounds(
     (min_x - pad_x, max_x + pad_x, min_y - pad_y, max_y + pad_y)
 }
 
-fn draw_minimap(
-    frame: &mut ratatui::Frame,
-    area: Rect,
-    viewport: &Viewport,
-    graph: &fdg_sim::ForceGraph<super::GraphNodeData, ()>,
-    node_colors: &HashMap<NodeIndex, Color>,
-    colors: &crate::config::ThemeColors,
-    config: &crate::config::GrafConfig,
-) {
-    let (wx_min, wx_max, wy_min, wy_max) = compute_graph_bounds(graph);
-    let aspect = area.width as f64 / area.height as f64;
-    let vp_x = viewport.x_bounds(aspect);
-    let vp_y = viewport.y_bounds(aspect);
+struct MinimapParams<'a> {
+    viewport: &'a Viewport,
+    graph: &'a fdg_sim::ForceGraph<super::GraphNodeData, ()>,
+    node_colors: &'a HashMap<NodeIndex, Color>,
+    colors: &'a crate::config::ThemeColors,
+    config: &'a crate::config::GrafConfig,
+    graph_bounds: (f64, f64, f64, f64),
+}
 
-    let nodes_clone: Vec<(f64, f64, Color)> = graph
+fn draw_minimap(frame: &mut ratatui::Frame, area: Rect, params: MinimapParams<'_>) {
+    let (wx_min, wx_max, wy_min, wy_max) = params.graph_bounds;
+    let aspect = area.width as f64 / area.height as f64;
+    let vp_x = params.viewport.x_bounds(aspect);
+    let vp_y = params.viewport.y_bounds(aspect);
+
+    let nodes_clone: Vec<(f64, f64, Color)> = params
+        .graph
         .node_indices()
-        .filter_map(|idx| {
-            let node = &graph[idx];
-            let color = node_colors.get(&idx).copied().unwrap_or(Color::Gray);
-            Some((node.location.x as f64, node.location.y as f64, color))
+        .map(|idx| {
+            let node = &params.graph[idx];
+            let color = params.node_colors.get(&idx).copied().unwrap_or(Color::Gray);
+            (node.location.x as f64, node.location.y as f64, color)
         })
         .collect();
 
-    let vp_color = colors.minimap_viewport_color;
-    let bg_color = colors.minimap_bg_color;
+    let vp_color = params.colors.minimap_viewport_color;
+    let bg_color = params.colors.minimap_bg_color;
 
     let canvas = Canvas::default()
         .x_bounds([wx_min, wx_max])
@@ -798,10 +719,12 @@ fn draw_minimap(
         .block(
             ratatui::widgets::Block::default()
                 .borders(ratatui::widgets::Borders::ALL)
-                .border_style(ratatui::style::Style::default().fg(colors.minimap_border_color)),
+                .border_style(
+                    ratatui::style::Style::default().fg(params.colors.minimap_border_color),
+                ),
         )
         .marker(ratatui::symbols::Marker::from(
-            config.visual.minimap_marker.clone(),
+            params.config.visual.minimap_marker.clone(),
         ))
         .paint(move |ctx| {
             if let Some(bg) = bg_color {

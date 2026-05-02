@@ -41,7 +41,6 @@ pub struct GraphState {
     pub dragging_node: Option<NodeIndex>,
     pub drag_target: Option<(f32, f32)>,
     pub is_settled: bool,
-    pub graph_bounds: (f64, f64, f64, f64),
 }
 
 impl GraphState {
@@ -55,18 +54,19 @@ impl GraphState {
             dragging_node: None,
             drag_target: None,
             is_settled: false,
-            graph_bounds: (0.0, 0.0, 0.0, 0.0),
         };
         state.viewport = state.viewport.auto_fit_from_graph(
             state.simulation.get_graph(),
             config.interaction.auto_fit_padding,
         );
-        state.graph_bounds = render::compute_graph_bounds(state.simulation.get_graph());
         state
     }
 }
 
-pub fn build_graph(files: &[FileData], config: &GrafConfig) -> ForceGraph<GraphNodeData, ()> {
+pub fn build_graph(
+    files: &[FileData],
+    config: &GrafConfig,
+) -> ForceGraph<GraphNodeData, ()> {
     let links = resolve_links(files, &config.filter.exclude_tags);
     let mut graph: ForceGraph<GraphNodeData, ()> = ForceGraph::default();
     let mut path_to_index: HashMap<String, NodeIndex> = HashMap::new();
@@ -75,7 +75,9 @@ pub fn build_graph(files: &[FileData], config: &GrafConfig) -> ForceGraph<GraphN
         .iter()
         .filter(|f| {
             config.filter.exclude_tags.is_empty()
-                || f.tags.iter().all(|t| !config.filter.exclude_tags.contains(t))
+                || f.tags
+                    .iter()
+                    .all(|t| !config.filter.exclude_tags.contains(t))
         })
         .filter(|f| {
             let lc = links.get(&f.relative_path).map(|v| v.len()).unwrap_or(0);
@@ -101,11 +103,10 @@ pub fn build_graph(files: &[FileData], config: &GrafConfig) -> ForceGraph<GraphN
             for target in targets {
                 if let Some(&target_idx) = path_to_index.get(target)
                     && source_idx != target_idx
-                    && graph.edges_connecting(source_idx, target_idx).count() == 0
-                {
-                    graph.add_edge(source_idx, target_idx, ());
-                }
-            }
+                        && graph.edges_connecting(source_idx, target_idx).count() == 0
+                    {
+                        graph.add_edge(source_idx, target_idx, ());
+                    }
         }
     }
 

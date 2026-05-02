@@ -6,6 +6,8 @@ use directories::ProjectDirs;
 use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 
+mod themes;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Theme {
@@ -13,7 +15,6 @@ pub enum Theme {
     Default,
     TokyoNight,
     CatppuccinMocha,
-    CatppuccinLatte,
     Onedark,
     Gruvbox,
     Dracula,
@@ -21,9 +22,7 @@ pub enum Theme {
     RosePine,
     Everforest,
     Kanagawa,
-    GruvboxLight,
-    GitHubLight,
-    OneLight,
+    Solarized,
 }
 
 impl FromStr for Theme {
@@ -37,13 +36,10 @@ impl FromStr for Theme {
             "gruvbox" => Ok(Theme::Gruvbox),
             "dracula" => Ok(Theme::Dracula),
             "nord" => Ok(Theme::Nord),
-            "catppuccin_latte" | "catppuccinlatte" => Ok(Theme::CatppuccinLatte),
             "rose_pine" | "rosepine" => Ok(Theme::RosePine),
             "everforest" => Ok(Theme::Everforest),
             "kanagawa" => Ok(Theme::Kanagawa),
-            "gruvbox_light" | "gruvboxlight" => Ok(Theme::GruvboxLight),
-            "github_light" | "githublight" => Ok(Theme::GitHubLight),
-            "one_light" | "onelight" => Ok(Theme::OneLight),
+            "solarized" | "solarized_dark" | "solarizeddark" => Ok(Theme::Solarized),
             _ => Err(format!("Unknown theme: {}", s)),
         }
     }
@@ -185,7 +181,7 @@ impl From<CanvasMarker> for ratatui::symbols::Marker {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeShape {
     #[default]
@@ -208,11 +204,24 @@ impl FromStr for NodeShape {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum BorderStyle {
     Plain,
+    #[default]
     Rounded,
     Double,
     None,
+}
+
+impl BorderStyle {
+    pub fn to_border_type(&self) -> ratatui::widgets::BorderType {
+        match self {
+            BorderStyle::Plain => ratatui::widgets::BorderType::Plain,
+            BorderStyle::Rounded => ratatui::widgets::BorderType::Rounded,
+            BorderStyle::Double => ratatui::widgets::BorderType::Double,
+            BorderStyle::None => ratatui::widgets::BorderType::Plain,
+        }
+    }
 }
 
 impl FromStr for BorderStyle {
@@ -228,15 +237,11 @@ impl FromStr for BorderStyle {
     }
 }
 
-impl Default for BorderStyle {
-    fn default() -> Self {
-        Self::Rounded
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum LegendPosition {
+    #[default]
     TopRight,
     TopLeft,
     BottomRight,
@@ -253,12 +258,6 @@ impl FromStr for LegendPosition {
             "bottom_left" | "bottomleft" => Ok(LegendPosition::BottomLeft),
             _ => Err(format!("Unknown legend position: {}", s)),
         }
-    }
-}
-
-impl Default for LegendPosition {
-    fn default() -> Self {
-        Self::TopRight
     }
 }
 
@@ -586,7 +585,7 @@ impl Default for LegendConfig {
     fn default() -> Self {
         Self {
             position: LegendPosition::BottomRight,
-            max_items: 100,
+            max_items: 10,
         }
     }
 }
@@ -617,21 +616,13 @@ impl Default for SearchConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EditorConfig {
     #[serde(default)]
     pub command: String,
 }
 
-impl Default for EditorConfig {
-    fn default() -> Self {
-        Self {
-            command: String::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GrafConfig {
     #[serde(default)]
     pub visual: VisualConfig,
@@ -649,21 +640,6 @@ pub struct GrafConfig {
     pub search: SearchConfig,
     #[serde(default)]
     pub editor: EditorConfig,
-}
-
-impl Default for GrafConfig {
-    fn default() -> Self {
-        Self {
-            visual: VisualConfig::default(),
-            physics: PhysicsConfig::default(),
-            interaction: InteractionConfig::default(),
-            display: DisplayConfig::default(),
-            filter: FilterConfig::default(),
-            legend: LegendConfig::default(),
-            search: SearchConfig::default(),
-            editor: EditorConfig::default(),
-        }
-    }
 }
 
 fn default_label_max() -> usize {
@@ -774,401 +750,7 @@ impl GrafConfig {
     }
 
     pub fn theme_colors(&self) -> ThemeColors {
-        let mut colors = match self.visual.theme {
-            Theme::Default => ThemeColors {
-                node_colors: vec![
-                    Color::Red,
-                    Color::Green,
-                    Color::Yellow,
-                    Color::Blue,
-                    Color::Magenta,
-                    Color::Cyan,
-                    Color::White,
-                    Color::Rgb(200, 200, 200),
-                ],
-                edge_color: Color::DarkGray,
-                border_color: Color::DarkGray,
-                title_color: Color::Gray,
-                label_color: Color::Gray,
-                legend_text_color: Color::Gray,
-                legend_border_color: Color::DarkGray,
-                selected_indicator_color: Color::Reset,
-                grid_color: Color::DarkGray,
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Reset),
-                },
-                status_bar_color: Color::DarkGray,
-                minimap_border_color: Color::DarkGray,
-                minimap_viewport_color: Color::White,
-                minimap_bg_color: None,
-            },
-            Theme::TokyoNight => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(122, 162, 247),
-                    Color::Rgb(187, 154, 247),
-                    Color::Rgb(125, 207, 255),
-                    Color::Rgb(224, 175, 104),
-                    Color::Rgb(158, 206, 106),
-                    Color::Rgb(247, 118, 142),
-                    Color::Rgb(148, 226, 213),
-                    Color::Rgb(255, 158, 100),
-                ],
-                edge_color: Color::Rgb(86, 95, 137),
-                border_color: Color::Rgb(86, 95, 137),
-                title_color: Color::Rgb(187, 154, 247),
-                label_color: Color::Rgb(203, 206, 215),
-                legend_text_color: Color::Rgb(203, 206, 215),
-                legend_border_color: Color::Rgb(86, 95, 137),
-                selected_indicator_color: Color::Rgb(255, 255, 255),
-                grid_color: Color::Rgb(56, 62, 95),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(26, 27, 38)),
-                },
-                status_bar_color: Color::Rgb(86, 95, 137),
-                minimap_border_color: Color::Rgb(86, 95, 137),
-                minimap_viewport_color: Color::Rgb(255, 255, 255),
-                minimap_bg_color: Some(Color::Rgb(26, 27, 38)),
-            },
-            Theme::Gruvbox => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(184, 187, 38),
-                    Color::Rgb(215, 153, 33),
-                    Color::Rgb(204, 94, 74),
-                    Color::Rgb(214, 93, 14),
-                    Color::Rgb(104, 157, 106),
-                    Color::Rgb(131, 165, 152),
-                    Color::Rgb(146, 131, 116),
-                    Color::Rgb(254, 128, 25),
-                ],
-                edge_color: Color::Rgb(102, 92, 84),
-                border_color: Color::Rgb(102, 92, 84),
-                title_color: Color::Rgb(184, 187, 38),
-                label_color: Color::Rgb(235, 219, 178),
-                legend_text_color: Color::Rgb(235, 219, 178),
-                legend_border_color: Color::Rgb(102, 92, 84),
-                selected_indicator_color: Color::Rgb(251, 241, 199),
-                grid_color: Color::Rgb(60, 56, 54),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(40, 40, 40)),
-                },
-                status_bar_color: Color::Rgb(102, 92, 84),
-                minimap_border_color: Color::Rgb(102, 92, 84),
-                minimap_viewport_color: Color::Rgb(251, 241, 199),
-                minimap_bg_color: Some(Color::Rgb(40, 40, 40)),
-            },
-            Theme::Dracula => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(139, 233, 253),
-                    Color::Rgb(189, 147, 249),
-                    Color::Rgb(139, 233, 253),
-                    Color::Rgb(255, 184, 108),
-                    Color::Rgb(80, 250, 123),
-                    Color::Rgb(255, 121, 198),
-                    Color::Rgb(255, 139, 127),
-                    Color::Rgb(255, 255, 150),
-                ],
-                edge_color: Color::Rgb(98, 114, 164),
-                border_color: Color::Rgb(98, 114, 164),
-                title_color: Color::Rgb(189, 147, 249),
-                label_color: Color::Rgb(248, 248, 242),
-                legend_text_color: Color::Rgb(248, 248, 242),
-                legend_border_color: Color::Rgb(98, 114, 164),
-                selected_indicator_color: Color::Rgb(255, 255, 255),
-                grid_color: Color::Rgb(68, 71, 90),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(40, 42, 54)),
-                },
-                status_bar_color: Color::Rgb(98, 114, 164),
-                minimap_border_color: Color::Rgb(98, 114, 164),
-                minimap_viewport_color: Color::Rgb(255, 255, 255),
-                minimap_bg_color: Some(Color::Rgb(40, 42, 54)),
-            },
-            Theme::Nord => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(136, 192, 208),
-                    Color::Rgb(143, 188, 187),
-                    Color::Rgb(163, 190, 140),
-                    Color::Rgb(235, 219, 178),
-                    Color::Rgb(214, 140, 140),
-                    Color::Rgb(216, 170, 133),
-                    Color::Rgb(200, 200, 200),
-                    Color::Rgb(163, 190, 140),
-                ],
-                edge_color: Color::Rgb(67, 76, 94),
-                border_color: Color::Rgb(67, 76, 94),
-                title_color: Color::Rgb(136, 192, 208),
-                label_color: Color::Rgb(216, 222, 233),
-                legend_text_color: Color::Rgb(216, 222, 233),
-                legend_border_color: Color::Rgb(67, 76, 94),
-                selected_indicator_color: Color::Rgb(236, 239, 244),
-                grid_color: Color::Rgb(59, 66, 82),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(46, 52, 64)),
-                },
-                status_bar_color: Color::Rgb(67, 76, 94),
-                minimap_border_color: Color::Rgb(67, 76, 94),
-                minimap_viewport_color: Color::Rgb(236, 239, 244),
-                minimap_bg_color: Some(Color::Rgb(46, 52, 64)),
-            },
-            Theme::CatppuccinLatte => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(239, 159, 118), // peach
-                    Color::Rgb(244, 184, 228), // pink
-                    Color::Rgb(137, 180, 250), // blue
-                    Color::Rgb(116, 199, 236), // sky
-                    Color::Rgb(166, 227, 161), // green
-                    Color::Rgb(249, 226, 175), // yellow
-                    Color::Rgb(235, 160, 172), // red
-                    Color::Rgb(180, 190, 254), // lavender
-                ],
-                edge_color: Color::Rgb(76, 79, 105),
-                border_color: Color::Rgb(76, 79, 105),
-                title_color: Color::Rgb(137, 180, 250),
-                label_color: Color::Rgb(76, 79, 105),
-                legend_text_color: Color::Rgb(76, 79, 105),
-                legend_border_color: Color::Rgb(76, 79, 105),
-                selected_indicator_color: Color::Rgb(76, 79, 105),
-                grid_color: Color::Rgb(209, 213, 228),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(239, 241, 245)),
-                },
-                status_bar_color: Color::Rgb(76, 79, 105),
-                minimap_border_color: Color::Rgb(76, 79, 105),
-                minimap_viewport_color: Color::Rgb(76, 79, 105),
-                minimap_bg_color: Some(Color::Rgb(239, 241, 245)),
-            },
-            Theme::RosePine => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(180, 142, 173), // love
-                    Color::Rgb(234, 154, 151), // gold
-                    Color::Rgb(156, 207, 216), // pine
-                    Color::Rgb(246, 193, 119), // foam
-                    Color::Rgb(155, 138, 221), // iris
-                    Color::Rgb(235, 111, 146), // rose
-                    Color::Rgb(159, 188, 198), // water
-                    Color::Rgb(209, 193, 168), // sand
-                ],
-                edge_color: Color::Rgb(102, 110, 129),
-                border_color: Color::Rgb(102, 110, 129),
-                title_color: Color::Rgb(156, 207, 216),
-                label_color: Color::Rgb(87, 82, 121),
-                legend_text_color: Color::Rgb(87, 82, 121),
-                legend_border_color: Color::Rgb(102, 110, 129),
-                selected_indicator_color: Color::Rgb(87, 82, 121),
-                grid_color: Color::Rgb(57, 53, 82),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(40, 37, 61)),
-                },
-                status_bar_color: Color::Rgb(102, 110, 129),
-                minimap_border_color: Color::Rgb(102, 110, 129),
-                minimap_viewport_color: Color::Rgb(87, 82, 121),
-                minimap_bg_color: Some(Color::Rgb(40, 37, 61)),
-            },
-            Theme::Everforest => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(255, 215, 89),  // yellow
-                    Color::Rgb(255, 143, 105), // red
-                    Color::Rgb(129, 204, 165), // green
-                    Color::Rgb(100, 200, 218), // aqua
-                    Color::Rgb(150, 205, 255), // blue
-                    Color::Rgb(220, 150, 255), // purple
-                    Color::Rgb(255, 180, 120), // orange
-                    Color::Rgb(200, 230, 150), // lime
-                ],
-                edge_color: Color::Rgb(95, 120, 102),
-                border_color: Color::Rgb(95, 120, 102),
-                title_color: Color::Rgb(129, 204, 165),
-                label_color: Color::Rgb(60, 76, 67),
-                legend_text_color: Color::Rgb(60, 76, 67),
-                legend_border_color: Color::Rgb(95, 120, 102),
-                selected_indicator_color: Color::Rgb(60, 76, 67),
-                grid_color: Color::Rgb(40, 50, 45),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(30, 38, 34)),
-                },
-                status_bar_color: Color::Rgb(95, 120, 102),
-                minimap_border_color: Color::Rgb(95, 120, 102),
-                minimap_viewport_color: Color::Rgb(60, 76, 67),
-                minimap_bg_color: Some(Color::Rgb(30, 38, 34)),
-            },
-            Theme::Kanagawa => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(147, 191, 254), // blue
-                    Color::Rgb(255, 158, 181), // pink
-                    Color::Rgb(203, 166, 247), // purple
-                    Color::Rgb(137, 180, 130), // green
-                    Color::Rgb(247, 234, 168), // yellow
-                    Color::Rgb(255, 173, 130), // peach
-                    Color::Rgb(125, 196, 228), // sky
-                    Color::Rgb(242, 205, 205), // red
-                ],
-                edge_color: Color::Rgb(95, 115, 135),
-                border_color: Color::Rgb(95, 115, 135),
-                title_color: Color::Rgb(147, 191, 254),
-                label_color: Color::Rgb(98, 114, 164),
-                legend_text_color: Color::Rgb(98, 114, 164),
-                legend_border_color: Color::Rgb(95, 115, 135),
-                selected_indicator_color: Color::Rgb(98, 114, 164),
-                grid_color: Color::Rgb(34, 40, 62),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(26, 30, 48)),
-                },
-                status_bar_color: Color::Rgb(95, 115, 135),
-                minimap_border_color: Color::Rgb(95, 115, 135),
-                minimap_viewport_color: Color::Rgb(98, 114, 164),
-                minimap_bg_color: Some(Color::Rgb(26, 30, 48)),
-            },
-            Theme::GruvboxLight => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(204, 36, 29),   // red
-                    Color::Rgb(152, 151, 26),   // green
-                    Color::Rgb(215, 153, 33),   // yellow
-                    Color::Rgb(69, 133, 136),   // blue
-                    Color::Rgb(177, 98, 134),   // purple
-                    Color::Rgb(104, 157, 106),  // aqua
-                    Color::Rgb(214, 93, 14),    // orange
-                    Color::Rgb(168, 153, 132),  // gray
-                ],
-                edge_color: Color::Rgb(60, 56, 54),
-                border_color: Color::Rgb(60, 56, 54),
-                title_color: Color::Rgb(69, 133, 136),
-                label_color: Color::Rgb(60, 56, 54),
-                legend_text_color: Color::Rgb(60, 56, 54),
-                legend_border_color: Color::Rgb(60, 56, 54),
-                selected_indicator_color: Color::Rgb(60, 56, 54),
-                grid_color: Color::Rgb(210, 195, 160),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(251, 241, 199)),
-                },
-                status_bar_color: Color::Rgb(60, 56, 54),
-                minimap_border_color: Color::Rgb(60, 56, 54),
-                minimap_viewport_color: Color::Rgb(60, 56, 54),
-                minimap_bg_color: Some(Color::Rgb(251, 241, 199)),
-            },
-            Theme::GitHubLight => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(9, 105, 218),   // blue
-                    Color::Rgb(26, 127, 55),   // green
-                    Color::Rgb(191, 135, 0),   // yellow
-                    Color::Rgb(207, 34, 46),   // red
-                    Color::Rgb(130, 80, 223),  // purple
-                    Color::Rgb(31, 136, 61),   // dark green
-                    Color::Rgb(33, 139, 255),  // light blue
-                    Color::Rgb(101, 109, 118), // gray
-                ],
-                edge_color: Color::Rgb(31, 35, 40),
-                border_color: Color::Rgb(31, 35, 40),
-                title_color: Color::Rgb(9, 105, 218),
-                label_color: Color::Rgb(31, 35, 40),
-                legend_text_color: Color::Rgb(31, 35, 40),
-                legend_border_color: Color::Rgb(31, 35, 40),
-                selected_indicator_color: Color::Rgb(31, 35, 40),
-                grid_color: Color::Rgb(208, 215, 222),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(255, 255, 255)),
-                },
-                status_bar_color: Color::Rgb(31, 35, 40),
-                minimap_border_color: Color::Rgb(31, 35, 40),
-                minimap_viewport_color: Color::Rgb(31, 35, 40),
-                minimap_bg_color: Some(Color::Rgb(255, 255, 255)),
-            },
-            Theme::OneLight => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(64, 120, 242),  // blue
-                    Color::Rgb(103, 161, 68),   // green
-                    Color::Rgb(192, 139, 48),   // yellow
-                    Color::Rgb(224, 82, 82),    // red
-                    Color::Rgb(176, 111, 224),  // purple
-                    Color::Rgb(80, 161, 79),    // dark green
-                    Color::Rgb(1, 132, 188),    // cyan
-                    Color::Rgb(160, 161, 167),  // gray
-                ],
-                edge_color: Color::Rgb(56, 58, 66),
-                border_color: Color::Rgb(56, 58, 66),
-                title_color: Color::Rgb(64, 120, 242),
-                label_color: Color::Rgb(56, 58, 66),
-                legend_text_color: Color::Rgb(56, 58, 66),
-                legend_border_color: Color::Rgb(56, 58, 66),
-                selected_indicator_color: Color::Rgb(56, 58, 66),
-                grid_color: Color::Rgb(230, 230, 230),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(250, 250, 250)),
-                },
-                status_bar_color: Color::Rgb(56, 58, 66),
-                minimap_border_color: Color::Rgb(56, 58, 66),
-                minimap_viewport_color: Color::Rgb(56, 58, 66),
-                minimap_bg_color: Some(Color::Rgb(250, 250, 250)),
-            },
-
-            Theme::CatppuccinMocha => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(137, 180, 250),
-                    Color::Rgb(203, 166, 247),
-                    Color::Rgb(116, 199, 236),
-                    Color::Rgb(249, 226, 175),
-                    Color::Rgb(166, 227, 161),
-                    Color::Rgb(245, 189, 220),
-                    Color::Rgb(242, 205, 205),
-                    Color::Rgb(250, 179, 135),
-                ],
-                edge_color: Color::Rgb(108, 112, 134),
-                border_color: Color::Rgb(108, 112, 134),
-                title_color: Color::Rgb(203, 166, 247),
-                label_color: Color::Rgb(205, 214, 244),
-                legend_text_color: Color::Rgb(205, 214, 244),
-                legend_border_color: Color::Rgb(108, 112, 134),
-                selected_indicator_color: Color::Rgb(205, 214, 244),
-                grid_color: Color::Rgb(49, 50, 68),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(30, 30, 46)),
-                },
-                status_bar_color: Color::Rgb(108, 112, 134),
-                minimap_border_color: Color::Rgb(108, 112, 134),
-                minimap_viewport_color: Color::Rgb(205, 214, 244),
-                minimap_bg_color: Some(Color::Rgb(30, 30, 46)),
-            },
-            Theme::Onedark => ThemeColors {
-                node_colors: vec![
-                    Color::Rgb(97, 175, 239),
-                    Color::Rgb(198, 120, 221),
-                    Color::Rgb(86, 182, 194),
-                    Color::Rgb(229, 192, 123),
-                    Color::Rgb(152, 195, 121),
-                    Color::Rgb(224, 108, 117),
-                    Color::Rgb(224, 150, 108),
-                    Color::Rgb(171, 178, 191),
-                ],
-                edge_color: Color::Rgb(92, 99, 112),
-                border_color: Color::Rgb(92, 99, 112),
-                title_color: Color::Rgb(198, 120, 221),
-                label_color: Color::Rgb(171, 178, 191),
-                legend_text_color: Color::Rgb(171, 178, 191),
-                legend_border_color: Color::Rgb(92, 99, 112),
-                selected_indicator_color: Color::Rgb(220, 223, 228),
-                grid_color: Color::Rgb(56, 63, 76),
-                background_color: match self.visual.background {
-                    Background::Transparent => None,
-                    Background::Solid => Some(Color::Rgb(40, 44, 52)),
-                },
-                status_bar_color: Color::Rgb(92, 99, 112),
-                minimap_border_color: Color::Rgb(92, 99, 112),
-                minimap_viewport_color: Color::Rgb(220, 223, 228),
-                minimap_bg_color: Some(Color::Rgb(40, 44, 52)),
-            },
-        };
+        let mut colors = themes::theme_colors(&self.visual.theme, self.visual.background.clone());
 
         if let Some(ref c) = self.visual.colors.node_color {
             colors.node_colors = vec![*c];
@@ -1245,8 +827,8 @@ impl GrafConfig {
             "{size}",
             &format!("{:.0}%", viewport_size_pct.unwrap_or(0.0).clamp(0.0, 100.0)),
         );
-        let fmt = fmt.replace("{ratio}", &format!("{:.1}x", viewport_ratio.unwrap_or(1.0)));
-        fmt
+
+        fmt.replace("{ratio}", &format!("{:.1}x", viewport_ratio.unwrap_or(1.0)))
     }
 
     /// Validate config values, return vec of error msgs.
@@ -1296,6 +878,11 @@ impl GrafConfig {
             } else if let Some(parent) = path.parent() {
                 let _ = fs::create_dir_all(parent);
                 let _ = fs::write(&path, generate_default_toml());
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+                }
                 created = true;
             }
         }
@@ -1413,107 +1000,6 @@ impl GrafConfig {
     }
 }
 
-fn generate_default_toml() -> String {
-    r###"# graf configuration
-# Edit values below to customize. Restart graf to apply changes.
-
-[visual]
-# Theme: "default", "tokyo_night", "catppuccin_mocha", "catppuccin_latte", "onedark", "gruvbox", "dracula", "nord", "rose_pine", "everforest", "kanagawa"
-theme = "default"
-# Background: "transparent", "solid"
-background = "solid"
-# Node color mode: "tag", "folder", "link_count", "uniform"
-node_color_mode = "folder"
-# Edge color mode: "source", "target", "uniform"
-edge_color_mode = "uniform"
-# Label display: "selected", "neighbors", "all", "none"
-label_mode = "selected"
-# Max label length (1-60)
-label_max_length = 20
-# Base node radius (1.0-5.0)
-node_size = 2.0
-# Node size mode: "fixed", "link_count"
-node_size_mode = "fixed"
-# Edge thickness (1-3)
-edge_thickness = 1
-show_legend = true
-show_grid = false
-show_minimap = false
-# Minimap corner: "top_right", "top_left", "bottom_right", "bottom_left"
-minimap_position = "top_right"
-minimap_width = 24
-minimap_height = 12
-# Main canvas marker: "braille", "half_block", "dot"
-canvas_marker = "braille"
-# Minimap marker: "braille", "half_block", "dot"
-minimap_marker = "half_block"
-# Node shape: "circle", "square", "diamond"
-node_shape = "circle"
-# Distance between node center and label
-label_offset = 4.0
-# Number of grid lines per axis
-grid_divisions = 10
-
-# Color overrides (hex, applied on top of theme). Uncomment to override theme defaults.
-[visual.colors]
-# node_color = "#ff6600"
-# edge_color = "#445566"
-# label_color = "#aabbcc"
-# selection_ring_color = "#ff00ff"
-# border_color = "#334455"
-# title_color = "#66ffcc"
-# grid_color = "#222233"
-# legend_text_color = "#ccddee"
-# status_bar_color = "#556677"
-# background_color = "#1a1a2e"
-
-[physics]
-# ideal_distance = 80.0
-# damping = 0.95
-# max_iterations = 800
-# gravity = 0.01
-# cooling = true
-# prevent_overlapping = true
-# timestep = 0.016
-# thread_sleep_ms = 16
-
-[interaction]
-# double_click_ms = 300
-# # Must be > 0
-# zoom_factor = 1.15
-# drag_sensitivity = 1.0
-# auto_fit_padding = 1.4
-# drag_scale = 200.0
-
-[display]
-# show_status_bar = true
-# # Status format placeholders: {files} {links} {selected} {date} {time} {size} {ratio}
-# # status_format = "{files} files | {links} links | {selected}"
-# # Border: "plain", "rounded", "double", "none"
-# border_style = "rounded"
-# # Title placeholders: {cwd}
-# border_title = "graf"
-
-[filter]
-# # exclude_tags = ["draft", "private"]
-# # exclude_patterns = ["templates/", "private/"]
-# min_links = 0
-# max_nodes = 500
-
-[legend]
-# Position: "top_right", "top_left", "bottom_right", "bottom_left"
-position = "bottom_right"
-max_items = 100
-
-[search]
-max_results = 20
-max_visible = 10
-popup_width = 50
-popup_y = 3
-cursor_glyph = "▎"
-
-[editor]
-# Falls back to $EDITOR then vim if empty
-# command = "nano"
-"###.to_string()
+fn generate_default_toml() -> &'static str {
+    include_str!("default_config.toml")
 }

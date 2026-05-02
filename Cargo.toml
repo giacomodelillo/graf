@@ -2,6 +2,27 @@
 name = "graf"
 version = "0.4.11"
 edition = "2024"
+rust-version = "1.85"
+description = "Terminal-based force-directed graph visualizer for markdown wikilinks"
+authors = ["reekta92 <mdag.92988@protonmail.com>"]
+license = "GPL-3.0-only"
+repository = "https://github.com/reekta92/graf"
+homepage = "https://github.com/reekta92/graf"
+readme = "README.md"
+keywords = ["graph", "markdown", "terminal", "wikilinks", "visualization"]
+categories = ["command-line-utilities", "visualization"]
+include = [
+    "src/**/*",
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "LICENSE",
+    "src/default_config.toml",
+]
+exclude = [
+    "Obsidian Vault/**",
+    "maintenance.md",
+]
 
 [dependencies]
 ratatui = "0.29"
@@ -16,3 +37,24 @@ anyhow = "1"
 glob = "0.3"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
+
+[package.metadata.deb]
+maintainer = "reekta92 <mdag.92988@protonmail.com>"
+copyright = "2025, reekta92 <mdag.92988@protonmail.com>"
+license-file = ["LICENSE", "0"]
+depends = "$auto"
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/graf", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/graf/README.md", "644"],
+    ["LICENSE", "usr/share/doc/graf/LICENSE", "644"],
+]
+
+[package.metadata.generate-rpm]
+license = "GPL-3.0-only"
+assets = [
+    { source = "target/release/graf", dest = "/usr/bin/graf", mode = "755" },
+    { source = "README.md", dest = "/usr/share/doc/graf/README.md", mode = "644" },
+    { source = "LICENSE", dest = "/usr/share/doc/graf/LICENSE", mode = "644" },
+]

@@ -327,13 +327,15 @@ Format: `GRAF_{SECTION}_{KEY}` in all caps with underscores.
 |-------|-------------|
 | `"default"` | Inherits colors from your terminal's color scheme. No hardcoded palette. |
 | `"tokyo-night"` | Tokyo Night (dark) palette |
+| `"catppuccin-mocha"` | Catppuccin Mocha palette |
+| `"catppuccin-latte"` | Catppuccin Latte (light) palette |
+| `"onedark"` | One Dark palette |
 | `"gruvbox"` | Gruvbox Dark palette |
 | `"dracula"` | Dracula palette |
 | `"nord"` | Nord Frost palette |
-| `"catppuccin-mocha"` | Catppuccin Mocha palette |
-| `"onedark"` | One Dark palette |
-| `"solarized-light"` | Solarized Light palette |
-| `"solarized-dark"` | Solarized Dark palette |
+| `"rose-pine"` | Rose Pine palette |
+| `"everforest"` | Everforest palette |
+| `"kanagawa"` | Kanagawa palette |
 
 ### Default theme behavior
 

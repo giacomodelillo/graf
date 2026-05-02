@@ -237,7 +237,16 @@ fn main() -> Result<()> {
         .config
         .clone()
         .or_else(|| config::GrafConfig::config_path().ok());
-    let (mut config, mut config_errors) = config::GrafConfig::load_from_path(config_path);
+    let (mut config, mut config_errors, config_created) =
+        config::GrafConfig::load_from_path(config_path);
+    if config_created {
+        eprintln!(
+            "Created default config at {}",
+            config::GrafConfig::config_path()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "~/.config/graf/config.toml".into())
+        );
+    }
     apply_cli_overrides(&mut config, &cli);
 
     config_errors.extend(config.validate());

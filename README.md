@@ -371,7 +371,3 @@ graf/
         ├── viewport.rs  # Pan, zoom, screen-to-world conversion, hit-testing
         └── physics.rs   # Background thread for force simulation
 ```
-
-## License
-
-MIT

@@ -11,7 +11,31 @@ A terminal-based force-directed graph visualizer for markdown wikilinks. Run `gr
 
 > Part of **[clin-rs](https://github.com/reekta92/clin-rs)**
 
-<!-- ![graf demo](assets/demo.gif) -->
+# Showcase
+<table>
+  <tr>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/bd3b94b3-db1c-49d8-818c-3b397f76730e" /></td>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/51a21b0e-261d-4d03-bd72-f6866a83a03d" /></td>
+  </tr>
+  <tr>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/34c3ade5-6d90-4d3b-9df1-d7b2bb400b0c" /></td>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/cae64831-faa3-445f-97e8-250be23bd05c" /></td>
+  </tr>
+  <tr>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/2a9b881d-518b-43e9-abec-763a3854ed95" /></td>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/cd2fd347-0e75-4d91-9833-063b1768e502" /></td>
+  </tr>
+  <tr>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/65a2c54c-c416-4b19-be6f-f305df9decda" /></td>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/a9fc970b-8cc3-47f7-8fd9-7a9534b1d367" /></td>
+  </tr>
+  <tr>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/b78004d4-e7ff-4bdf-a3a1-ad663f3c21ab" /></td>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/55e9f34a-9bfa-44e8-b147-8b9ff2dda365" /></td>
+  </tr>
+</table>
+
+https://github.com/user-attachments/assets/de06ffda-a1f6-4317-9cd2-f7a222c13f18
 
 - - -
 

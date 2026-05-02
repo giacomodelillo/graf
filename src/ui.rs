@@ -4,6 +4,15 @@ use ratatui::Frame;
 use crate::app::AppState;
 use crate::config::GrafConfig;
 
+fn border_type_from_config(config: &GrafConfig) -> ratatui::widgets::BorderType {
+    match config.display.border_style {
+        crate::config::BorderStyle::Plain => ratatui::widgets::BorderType::Plain,
+        crate::config::BorderStyle::Rounded => ratatui::widgets::BorderType::Rounded,
+        crate::config::BorderStyle::Double => ratatui::widgets::BorderType::Double,
+        crate::config::BorderStyle::None => ratatui::widgets::BorderType::Plain,
+    }
+}
+
 pub fn draw_ui(frame: &mut Frame, state: &AppState, config: &GrafConfig) {
     let area = frame.area();
 
@@ -13,13 +22,19 @@ pub fn draw_ui(frame: &mut Frame, state: &AppState, config: &GrafConfig) {
     }
 
     if !state.config_errors.is_empty() {
-        draw_config_errors(frame, area, &state.config_errors);
+        draw_config_errors(frame, area, &state.config_errors, config);
         return;
     }
 
     if let Some(graph_state) = &state.graph_state {
         let guard = graph_state.read().unwrap_or_else(|e| e.into_inner());
-        crate::graph::render::draw_graph_view(frame, &guard, config);
+        let flags = crate::graph::render::FeatureFlags {
+            show_legend: state.show_legend,
+            show_grid: state.show_grid,
+            show_minimap: state.show_minimap,
+            show_status_bar: state.show_status_bar,
+        };
+        crate::graph::render::draw_graph_view(frame, &guard, config, &flags);
     }
 
     if state.search_active {
@@ -27,7 +42,7 @@ pub fn draw_ui(frame: &mut Frame, state: &AppState, config: &GrafConfig) {
     }
 }
 
-fn draw_config_errors(frame: &mut Frame, area: Rect, errors: &[String]) {
+fn draw_config_errors(frame: &mut Frame, area: Rect, errors: &[String], config: &GrafConfig) {
     let config_path = crate::config::GrafConfig::config_path()
         .unwrap_or_default()
         .display()
@@ -49,7 +64,7 @@ fn draw_config_errors(frame: &mut Frame, area: Rect, errors: &[String]) {
             ratatui::widgets::Block::default()
                 .borders(ratatui::widgets::Borders::ALL)
                 .title("Config Error")
-                .border_type(ratatui::widgets::BorderType::Rounded),
+                .border_type(border_type_from_config(config)),
         )
         .alignment(ratatui::layout::Alignment::Left);
 
@@ -94,14 +109,20 @@ fn suggest_fix(err: &str) -> Option<String> {
     None
 }
 
-fn draw_help(frame: &mut Frame, area: Rect, _config: &GrafConfig) {
+fn draw_help(frame: &mut Frame, area: Rect, config: &GrafConfig) {
     let help_text = vec![
         "Keyboard",
-        "  Arrows      Pan view",
+        "  Arrows      Navigate nodes",
         "  +/-         Zoom in/out",
         "  Enter       Open selected file",
         "  a           Auto-fit view",
-        "  / or Ctrl+F Search nodes",
+        "  f           Search nodes",
+        "  Shift+m     Toggle minimap",
+        "  Shift+l     Toggle legend",
+        "  Shift+g     Toggle grid",
+        "  Shift+s     Toggle status bar",
+        "  r           Refresh simulation",
+        "  f           Search nodes",
         "  ?           Toggle help",
         "  q/Esc       Quit",
         "",
@@ -119,7 +140,7 @@ fn draw_help(frame: &mut Frame, area: Rect, _config: &GrafConfig) {
             ratatui::widgets::Block::default()
                 .borders(ratatui::widgets::Borders::ALL)
                 .title("Help")
-                .border_type(ratatui::widgets::BorderType::Rounded),
+                .border_type(border_type_from_config(config)),
         )
         .alignment(ratatui::layout::Alignment::Left);
 
@@ -137,23 +158,51 @@ fn draw_help(frame: &mut Frame, area: Rect, _config: &GrafConfig) {
 
 fn draw_search(frame: &mut Frame, area: Rect, state: &AppState, config: &GrafConfig) {
     let colors = config.theme_colors();
-    let max_visible = 10;
+    let max_visible = config.search.max_visible;
     let result_count = state.search_results.len();
     let visible_count = result_count.min(max_visible);
-    let popup_width = 50.min(area.width.saturating_sub(4));
+    let popup_width = config.search.popup_width.min(area.width.saturating_sub(4));
     let popup_height = (visible_count + 3).min(area.height.saturating_sub(4) as usize) as u16;
 
     let popup_x = (area.width.saturating_sub(popup_width)) / 2;
-    let popup_y = 3;
+    let popup_y = config.search.popup_y;
 
     let popup_area = ratatui::layout::Rect::new(popup_x, popup_y, popup_width, popup_height);
 
-    let input_line = format!("/ {}▎", state.search_query);
+    let before = &state.search_query[..state.search_cursor];
+    let after = &state.search_query[state.search_cursor..];
+    let label_style = ratatui::style::Style::default().fg(colors.label_color);
+    let cursor_style = ratatui::style::Style::default()
+        .fg(colors.border_color)
+        .add_modifier(ratatui::style::Modifier::REVERSED);
+    let input_line = ratatui::text::Line::from(vec![
+        ratatui::text::Span::styled(before.to_string(), label_style),
+        ratatui::text::Span::styled(
+            after
+                .chars()
+                .next()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| " ".to_string()),
+            cursor_style,
+        ),
+        ratatui::text::Span::styled(
+            after
+                .chars()
+                .next()
+                .map(|_| {
+                    after[after
+                        .char_indices()
+                        .nth(1)
+                        .map(|(i, _)| i)
+                        .unwrap_or(after.len())..]
+                        .to_string()
+                })
+                .unwrap_or_default(),
+            label_style,
+        ),
+    ]);
 
-    let mut lines: Vec<ratatui::text::Line> = vec![ratatui::text::Line::styled(
-        input_line,
-        ratatui::style::Style::default().fg(colors.label_color),
-    )];
+    let mut lines: Vec<ratatui::text::Line> = vec![input_line];
 
     if result_count == 0 && !state.search_query.is_empty() {
         lines.push(ratatui::text::Line::styled(
@@ -161,7 +210,16 @@ fn draw_search(frame: &mut Frame, area: Rect, state: &AppState, config: &GrafCon
             ratatui::style::Style::default().fg(colors.status_bar_color),
         ));
     } else {
-        for (i, (_, title)) in state.search_results.iter().take(max_visible).enumerate() {
+        let scroll_offset = state
+            .search_selected
+            .saturating_sub(max_visible.saturating_sub(1));
+        for (i, (_, title)) in state
+            .search_results
+            .iter()
+            .enumerate()
+            .skip(scroll_offset)
+            .take(max_visible)
+        {
             let is_selected = i == state.search_selected;
             let style = if is_selected {
                 ratatui::style::Style::default()
@@ -170,7 +228,7 @@ fn draw_search(frame: &mut Frame, area: Rect, state: &AppState, config: &GrafCon
             } else {
                 ratatui::style::Style::default().fg(colors.label_color)
             };
-            let prefix = if is_selected { " > " } else { "   " };
+            let prefix = "  ";
             let display = truncate_display(title, (popup_width as usize).saturating_sub(6));
             lines.push(ratatui::text::Line::styled(
                 format!("{}{}", prefix, display),
@@ -182,7 +240,7 @@ fn draw_search(frame: &mut Frame, area: Rect, state: &AppState, config: &GrafCon
     let block = ratatui::widgets::Block::default()
         .borders(ratatui::widgets::Borders::ALL)
         .title("Search")
-        .border_type(ratatui::widgets::BorderType::Rounded)
+        .border_type(border_type_from_config(config))
         .border_style(ratatui::style::Style::default().fg(colors.border_color));
 
     let paragraph = ratatui::widgets::Paragraph::new(lines).block(block);

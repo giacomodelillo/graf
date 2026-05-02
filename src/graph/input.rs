@@ -4,6 +4,7 @@ use std::time::Instant;
 use crossterm::event::{KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
+use super::viewport::CELL_ASPECT;
 use super::GraphState;
 use crate::config::GrafConfig;
 
@@ -19,16 +20,16 @@ pub fn handle_graph_keys(
             return Some("quit".to_string());
         }
         crossterm::event::KeyCode::Up => {
-            guard.viewport.pan_up(config.interaction.pan_sensitivity);
+            select_in_direction(&mut guard, 0.0, 1.0);
         }
         crossterm::event::KeyCode::Down => {
-            guard.viewport.pan_down(config.interaction.pan_sensitivity);
+            select_in_direction(&mut guard, 0.0, -1.0);
         }
         crossterm::event::KeyCode::Left => {
-            guard.viewport.pan_left(config.interaction.pan_sensitivity);
+            select_in_direction(&mut guard, -1.0, 0.0);
         }
         crossterm::event::KeyCode::Right => {
-            guard.viewport.pan_right(config.interaction.pan_sensitivity);
+            select_in_direction(&mut guard, 1.0, 0.0);
         }
         crossterm::event::KeyCode::Char('+') | crossterm::event::KeyCode::Char('=') => {
             guard.viewport.zoom_in(config.interaction.zoom_factor);
@@ -44,24 +45,32 @@ pub fn handle_graph_keys(
             }
         }
         crossterm::event::KeyCode::Char('a') => {
-            let vp = guard
-                .viewport
-                .clone()
-                .auto_fit_from_graph(guard.simulation.get_graph());
+            let vp = guard.viewport.clone().auto_fit_from_graph(
+                guard.simulation.get_graph(),
+                config.interaction.auto_fit_padding,
+            );
             guard.viewport = vp;
         }
-        crossterm::event::KeyCode::Char('/') => {
-            return Some("search".to_string());
+        crossterm::event::KeyCode::Char('r') => {
+            return Some("refresh".to_string());
         }
-        crossterm::event::KeyCode::Char('f')
-            if key
-                .modifiers
-                .contains(crossterm::event::KeyModifiers::CONTROL) =>
-        {
+        crossterm::event::KeyCode::Char('f') => {
             return Some("search".to_string());
         }
         crossterm::event::KeyCode::Char('?') => {
             return Some("help".to_string());
+        }
+        crossterm::event::KeyCode::Char('M') => {
+            return Some("toggle:minimap".to_string());
+        }
+        crossterm::event::KeyCode::Char('L') => {
+            return Some("toggle:legend".to_string());
+        }
+        crossterm::event::KeyCode::Char('G') => {
+            return Some("toggle:grid".to_string());
+        }
+        crossterm::event::KeyCode::Char('S') => {
+            return Some("toggle:status".to_string());
         }
         _ => {}
     }
@@ -184,12 +193,18 @@ pub fn handle_graph_mouse(
                     mouse_state.drag_origin = Some((mouse_event.column, mouse_event.row));
                 }
             } else if mouse_state.is_panning {
-                let dx = -(mouse_event.column as f64 - orig_col as f64)
-                    * config.interaction.pan_sensitivity;
-                let dy =
-                    (mouse_event.row as f64 - orig_row as f64) * config.interaction.pan_sensitivity;
                 let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
-                guard.viewport.pan(dx, dy);
+                let dx_col = -(mouse_event.column as f64 - orig_col as f64);
+                let dy_row = mouse_event.row as f64 - orig_row as f64;
+                let vp = &guard.viewport;
+                let world_dx = dx_col * config.interaction.drag_scale
+                    / (vp.zoom * area.width as f64)
+                    * config.interaction.drag_sensitivity;
+                let world_dy = dy_row * config.interaction.drag_scale * CELL_ASPECT
+                    / (vp.zoom * area.height as f64)
+                    * config.interaction.drag_sensitivity;
+                guard.viewport.center_x += world_dx;
+                guard.viewport.center_y += world_dy;
                 mouse_state.drag_origin = Some((mouse_event.column, mouse_event.row));
             } else {
                 let (wx, wy) = {
@@ -228,6 +243,40 @@ pub fn handle_graph_mouse(
     }
 
     None
+}
+
+fn select_in_direction(guard: &mut GraphState, dx: f64, dy: f64) {
+    if guard.selected_node.is_none() {
+        guard.selected_node = guard.viewport.nearest_to_center(&guard);
+        if let Some(idx) = guard.selected_node {
+            let graph = guard.simulation.get_graph();
+            let node = &graph[idx];
+            guard
+                .viewport
+                .center_on_node(node.location.x, node.location.y);
+        }
+        return;
+    }
+
+    let (ox, oy) = {
+        let graph = guard.simulation.get_graph();
+        let idx = guard.selected_node.unwrap();
+        let node = &graph[idx];
+        (node.location.x as f64, node.location.y as f64)
+    };
+
+    if let Some(next) =
+        guard
+            .viewport
+            .nearest_in_direction(&guard, ox, oy, dx, dy, guard.selected_node)
+    {
+        guard.selected_node = Some(next);
+        let graph = guard.simulation.get_graph();
+        let node = &graph[next];
+        guard
+            .viewport
+            .center_on_node(node.location.x, node.location.y);
+    }
 }
 
 fn minimap_screen_to_world(

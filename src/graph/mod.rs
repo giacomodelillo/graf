@@ -97,7 +97,11 @@ pub fn build_graph(
     (graph, total_edges)
 }
 
-pub fn search_nodes(sim: &Simulation<GraphNodeData, ()>, query: &str) -> Vec<(NodeIndex, String)> {
+pub fn search_nodes(
+    sim: &Simulation<GraphNodeData, ()>,
+    query: &str,
+    max_results: usize,
+) -> Vec<(NodeIndex, String)> {
     if query.is_empty() {
         return Vec::new();
     }
@@ -118,7 +122,7 @@ pub fn search_nodes(sim: &Simulation<GraphNodeData, ()>, query: &str) -> Vec<(No
         })
         .collect();
     results.sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()));
-    results.truncate(20);
+    results.truncate(max_results);
     results
 }
 
@@ -129,8 +133,8 @@ pub fn create_simulation(
     let force = fdg_sim::force::handy(
         config.physics.ideal_distance as f32,
         config.physics.damping,
-        true,
-        true,
+        config.physics.cooling,
+        config.physics.prevent_overlapping,
     );
     let params = SimulationParameters::new(
         config.physics.max_iterations as f32,

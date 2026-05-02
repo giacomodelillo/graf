@@ -9,6 +9,8 @@ pub fn start_physics(
     kill_rx: mpsc::Receiver<()>,
 ) {
     let gravity = config.physics.gravity;
+    let timestep = config.physics.timestep;
+    let sleep_ms = config.physics.thread_sleep_ms;
 
     std::thread::spawn(move || loop {
         if kill_rx.try_recv().is_ok() {
@@ -22,7 +24,7 @@ pub fn start_physics(
 
         if should_update {
             let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
-            guard.simulation.update(0.016);
+            guard.simulation.update(timestep as f32);
 
             // If a node is being dragged, override its location to the drag target
             if let Some((tx, ty)) = guard.drag_target {
@@ -52,6 +54,6 @@ pub fn start_physics(
             }
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(16));
+        std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
     });
 }

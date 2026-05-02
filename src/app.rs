@@ -18,6 +18,11 @@ pub struct AppState {
     pub search_query: String,
     pub search_results: Vec<(NodeIndex, String)>,
     pub search_selected: usize,
+    pub search_cursor: usize,
+    pub show_minimap: bool,
+    pub show_legend: bool,
+    pub show_grid: bool,
+    pub show_status_bar: bool,
 }
 
 impl AppState {
@@ -32,10 +37,10 @@ impl AppState {
             drag_target: None,
             is_settled: false,
         };
-        let vp = graph_state
-            .viewport
-            .clone()
-            .auto_fit_from_graph(graph_state.simulation.get_graph());
+        let vp = graph_state.viewport.clone().auto_fit_from_graph(
+            graph_state.simulation.get_graph(),
+            config.interaction.auto_fit_padding,
+        );
         graph_state.viewport = vp;
 
         let state = Arc::new(RwLock::new(graph_state));
@@ -53,7 +58,38 @@ impl AppState {
             search_query: String::new(),
             search_results: Vec::new(),
             search_selected: 0,
+            search_cursor: 0,
+            show_minimap: config.visual.show_minimap,
+            show_legend: config.visual.show_legend,
+            show_grid: config.visual.show_grid,
+            show_status_bar: config.display.show_status_bar,
         }
+    }
+
+    pub fn refresh_simulation(&mut self, config: &GrafConfig) {
+        if let Some(kill_tx) = self.graph_kill_tx.take() {
+            let _ = kill_tx.send(());
+        }
+        let (graph, _) = crate::graph::build_graph(&self.files, config);
+        let simulation = crate::graph::create_simulation(graph, config);
+        let mut graph_state = crate::graph::GraphState {
+            viewport: crate::graph::viewport::Viewport::default(),
+            simulation,
+            selected_node: None,
+            dragging_node: None,
+            drag_target: None,
+            is_settled: false,
+        };
+        let vp = graph_state.viewport.clone().auto_fit_from_graph(
+            graph_state.simulation.get_graph(),
+            config.interaction.auto_fit_padding,
+        );
+        graph_state.viewport = vp;
+        let state = Arc::new(RwLock::new(graph_state));
+        let (kill_tx, kill_rx) = std::sync::mpsc::channel();
+        crate::graph::physics::start_physics(state.clone(), config, kill_rx);
+        self.graph_state = Some(state);
+        self.graph_kill_tx = Some(kill_tx);
     }
 
     pub fn shutdown(&mut self) {

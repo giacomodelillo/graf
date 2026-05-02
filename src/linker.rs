@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use glob::glob;
 use once_cell::sync::Lazy;
@@ -16,7 +16,6 @@ static TITLE_RE: Lazy<Regex> =
 
 #[derive(Debug, Clone)]
 pub struct FileData {
-    pub path: PathBuf,
     pub relative_path: String,
     pub title: String,
     pub tags: Vec<String>,
@@ -96,7 +95,6 @@ fn parse_markdown_file(path: &Path, base: &Path) -> anyhow::Result<FileData> {
     });
 
     Ok(FileData {
-        path: path.to_path_buf(),
         relative_path,
         title,
         tags,

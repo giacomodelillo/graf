@@ -1,15 +1,17 @@
 use ratatui::layout::Rect;
 
+use fdg_sim::petgraph::graph::NodeIndex;
+
 use super::GraphState;
 
-const PAN_AMOUNT: f64 = 5.0;
-const CELL_ASPECT: f64 = 0.5;
+pub const CELL_ASPECT: f64 = 0.5;
 
 #[derive(Clone)]
 pub struct Viewport {
     pub center_x: f64,
     pub center_y: f64,
     pub zoom: f64,
+    pub max_zoom: f64,
 }
 
 impl Default for Viewport {
@@ -18,6 +20,7 @@ impl Default for Viewport {
             center_x: 0.0,
             center_y: 0.0,
             zoom: 1.0,
+            max_zoom: 100.0,
         }
     }
 }
@@ -46,6 +49,7 @@ impl Viewport {
     pub fn auto_fit_from_graph(
         &self,
         graph: &fdg_sim::ForceGraph<super::GraphNodeData, ()>,
+        auto_fit_padding: f64,
     ) -> Viewport {
         let mut vp = self.clone();
         if graph.node_count() == 0 {
@@ -71,35 +75,18 @@ impl Viewport {
 
         let range_x = (max_x - min_x).max(1.0);
         let range_y = (max_y - min_y).max(1.0);
-        let range = range_x.max(range_y) * 1.4;
-        vp.zoom = 200.0 / range;
+        let range = range_x.max(range_y) * auto_fit_padding;
+        let full_zoom = 200.0 / range;
+        vp.zoom = full_zoom;
+        vp.max_zoom = full_zoom * (100.0_f64 / 0.5_f64).sqrt();
         vp
-    }
-
-    pub fn pan(&mut self, dx: f64, dy: f64) {
-        let scale = 100.0 / self.zoom;
-        self.center_x += dx * scale;
-        self.center_y += dy * scale;
-    }
-
-    pub fn pan_up(&mut self, sensitivity: f64) {
-        self.pan(0.0, PAN_AMOUNT * sensitivity);
-    }
-
-    pub fn pan_down(&mut self, sensitivity: f64) {
-        self.pan(0.0, -PAN_AMOUNT * sensitivity);
-    }
-
-    pub fn pan_left(&mut self, sensitivity: f64) {
-        self.pan(-PAN_AMOUNT * sensitivity, 0.0);
-    }
-
-    pub fn pan_right(&mut self, sensitivity: f64) {
-        self.pan(PAN_AMOUNT * sensitivity, 0.0);
     }
 
     pub fn zoom_in(&mut self, factor: f64) {
         self.zoom *= factor;
+        if self.zoom > self.max_zoom {
+            self.zoom = self.max_zoom;
+        }
     }
 
     pub fn zoom_out(&mut self, factor: f64) {
@@ -112,6 +99,71 @@ impl Viewport {
     pub fn center_on_node(&mut self, x: f32, y: f32) {
         self.center_x = x as f64;
         self.center_y = y as f64;
+    }
+
+    pub fn nearest_to_center(&self, state: &GraphState) -> Option<NodeIndex> {
+        let graph = state.simulation.get_graph();
+        let mut best: Option<(NodeIndex, f64)> = None;
+        for idx in graph.node_indices() {
+            let node = &graph[idx];
+            let dx = node.location.x as f64 - self.center_x;
+            let dy = node.location.y as f64 - self.center_y;
+            let dist = (dx * dx + dy * dy).sqrt();
+            match best {
+                Some((_, bd)) if dist >= bd => {}
+                _ => best = Some((idx, dist)),
+            }
+        }
+        best.map(|(idx, _)| idx)
+    }
+
+    pub fn nearest_in_direction(
+        &self,
+        state: &GraphState,
+        origin_x: f64,
+        origin_y: f64,
+        dir_x: f64,
+        dir_y: f64,
+        exclude: Option<NodeIndex>,
+    ) -> Option<NodeIndex> {
+        let graph = state.simulation.get_graph();
+        let dir_len = (dir_x * dir_x + dir_y * dir_y).sqrt();
+        if dir_len == 0.0 {
+            return None;
+        }
+        let ndx = dir_x / dir_len;
+        let ndy = dir_y / dir_len;
+
+        const ANGLE_THRESHOLD: f64 = 1.0472; // ~60 degrees
+        const ANGLE_WEIGHT: f64 = 80.0;
+
+        let mut best: Option<(NodeIndex, f64)> = None;
+        for idx in graph.node_indices() {
+            if exclude == Some(idx) {
+                continue;
+            }
+            let node = &graph[idx];
+            let dx = node.location.x as f64 - origin_x;
+            let dy = node.location.y as f64 - origin_y;
+            let dist = (dx * dx + dy * dy).sqrt();
+            if dist < 1e-6 {
+                continue;
+            }
+            let dot = (dx * ndx + dy * ndy) / dist;
+            if dot < 0.0 {
+                continue;
+            }
+            let angle = dot.acos();
+            if angle > ANGLE_THRESHOLD {
+                continue;
+            }
+            let score = ANGLE_WEIGHT * angle + dist;
+            match best {
+                Some((_, bs)) if score >= bs => {}
+                _ => best = Some((idx, score)),
+            }
+        }
+        best.map(|(idx, _)| idx)
     }
 
     pub fn hit_test(

@@ -81,19 +81,39 @@ node_size_mode = "link_count"
 edge_thickness = 1
 show_legend = true
 show_grid = false
+show_minimap = true
+minimap_position = "bottom_right"
+minimap_width = 30
+minimap_height = 12
+canvas_marker = "braille"
+node_shape = "circle"
+label_offset = 4.0
+grid_divisions = 10
+
+[visual.colors]
+node_color = "#ff6600"
+edge_color = "#333333"
+label_color = "#aaaaaa"
+selection_ring_color = "#ffffff"
+border_color = "#555555"
+grid_color = "#222222"
 
 [physics]
 ideal_distance = 80.0
-repulsion_strength = 80.0
-attraction_strength = 1.0
 damping = 0.95
 max_iterations = 800
 gravity = 0.01
+cooling = true
+prevent_overlapping = true
+timestep = 0.016
+thread_sleep_ms = 16
 
 [interaction]
 double_click_ms = 300
-pan_sensitivity = 0.2
 zoom_factor = 1.15
+drag_sensitivity = 0.5
+auto_fit_padding = 1.4
+drag_scale = 200.0
 
 [display]
 show_status_bar = true
@@ -110,6 +130,16 @@ max_nodes = 500
 [legend]
 position = "top_right"
 max_items = 10
+
+[search]
+max_results = 20
+max_visible = 10
+popup_width = 50
+popup_y = 3
+cursor_glyph = "▎"
+
+[editor]
+command = ""
 ```
 
 ### `[visual]`
@@ -118,15 +148,40 @@ max_items = 10
 |-----|------|---------|-------------|
 | `theme` | string | `"default"` | Color scheme preset (see **Themes** below) |
 | `background` | string | `"transparent"` | `"transparent"` passes through terminal transparency, `"solid"` fills with theme background color |
-| `node_color_mode` | string | `"tag"` | How nodes are colored: `"tag"` by primary tag, `"link_count"` by number of connections, `"uniform"` single color for all |
-| `edge_color_mode` | string | `"source"` | Edge color: `"source"` matches source node, `"target"` matches target node, `"uniform"` single color |
+| `node_color_mode` | string | `"tag"` | How nodes are colored: `"tag"`, `"folder"`, `"link_count"`, `"uniform"` |
+| `edge_color_mode` | string | `"source"` | Edge color: `"source"`, `"target"`, `"uniform"` |
 | `label_mode` | string | `"selected"` | Which labels to show: `"selected"`, `"neighbors"`, `"all"`, `"none"` |
 | `label_max_length` | int | `20` | Max characters for title labels (1–60) |
 | `node_size` | float | `2.0` | Base node radius (1–5) |
-| `node_size_mode` | string | `"fixed"` | `"fixed"` constant size, `"link_count"` scales with number of connections |
+| `node_size_mode` | string | `"fixed"` | `"fixed"` constant size, `"link_count"` scales with connections |
 | `edge_thickness` | int | `1` | Line thickness for edges (1–3) |
 | `show_legend` | bool | `true` | Show tag legend |
 | `show_grid` | bool | `false` | Show background grid overlay |
+| `show_minimap` | bool | `true` | Show minimap in corner |
+| `minimap_position` | string | `"top_right"` | Minimap position: `"top_right"`, `"top_left"`, `"bottom_right"`, `"bottom_left"` |
+| `minimap_width` | int | `30` | Minimap width in columns |
+| `minimap_height` | int | `12` | Minimap height in rows |
+| `canvas_marker` | string | `"braille"` | Canvas rendering marker: `"braille"`, `"halfblock"`, `"dot"` |
+| `node_shape` | string | `"circle"` | Node shape: `"circle"`, `"square"`, `"diamond"` |
+| `label_offset` | float | `4.0` | Distance between node edge and label |
+| `grid_divisions` | int | `10` | Number of grid lines per axis (2–50) |
+
+### `[visual.colors]`
+
+Optional hex color overrides applied on top of the selected theme. All fields are optional.
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `node_color` | hex string | Override all node colors (e.g. `"#ff6600"`) |
+| `edge_color` | hex string | Override edge color |
+| `label_color` | hex string | Override label text color |
+| `selection_ring_color` | hex string | Override selection ring color |
+| `border_color` | hex string | Override border, legend border, and minimap border |
+| `title_color` | hex string | Override title color |
+| `grid_color` | hex string | Override grid line color |
+| `legend_text_color` | hex string | Override legend text color |
+| `status_bar_color` | hex string | Override status bar text color |
+| `background_color` | hex string | Override canvas and minimap background color |
 
 ### `[physics]`
 
@@ -135,19 +190,23 @@ Controls the force-directed layout simulation.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `ideal_distance` | float | `80.0` | Target distance between connected nodes |
-| `repulsion_strength` | float | `80.0` | How strongly nodes push each other apart |
-| `attraction_strength` | float | `1.0` | How strongly connected nodes pull together |
 | `damping` | float | `0.95` | Velocity damping per step (lower = faster settling) |
 | `max_iterations` | int | `800` | Maximum simulation steps before stopping |
-| `gravity` | float | `0.01` | Center pull to prevent nodes from drifting off-screen |
+| `gravity` | float | `0.01` | Center pull to prevent drift |
+| `cooling` | bool | `true` | Whether simulation cools down over time |
+| `prevent_overlapping` | bool | `true` | Prevent nodes from overlapping |
+| `timestep` | float | `0.016` | Simulation timestep (lower = smoother but slower) |
+| `thread_sleep_ms` | int | `16` | Milliseconds between simulation steps (~60fps) |
 
 ### `[interaction]`
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `double_click_ms` | int | `300` | Time window in milliseconds to register a double-click |
-| `pan_sensitivity` | float | `0.2` | Pan speed multiplier for keyboard and mouse |
 | `zoom_factor` | float | `1.15` | Zoom multiplier per scroll or key press |
+| `drag_sensitivity` | float | `0.5` | Mouse drag speed multiplier |
+| `auto_fit_padding` | float | `1.4` | Padding multiplier when auto-fitting view (higher = more zoomed out) |
+| `drag_scale` | float | `200.0` | Internal scaling factor for background drag panning |
 
 ### `[display]`
 
@@ -173,6 +232,51 @@ Controls the force-directed layout simulation.
 |-----|------|---------|-------------|
 | `position` | string | `"top_right"` | Legend position: `"top_right"`, `"top_left"`, `"bottom_right"`, `"bottom_left"` |
 | `max_items` | int | `10` | Maximum tag groups to show in the legend |
+
+### `[search]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `max_results` | int | `20` | Maximum search results to return |
+| `max_visible` | int | `10` | Maximum results visible without scrolling |
+| `popup_width` | int | `50` | Search popup width in columns |
+| `popup_y` | int | `3` | Vertical position of search popup from top |
+| `cursor_glyph` | string | `"▎"` | Cursor character in search input |
+
+### `[editor]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `command` | string | `""` | Editor command. Falls back to `$EDITOR` env var, then `vim` |
+
+## CLI Arguments
+
+```
+graf [OPTIONS]
+
+Options:
+  -d, --dir <DIR>              Directory to scan [default: current]
+  -c, --config <CONFIG>        Path to config file
+      --theme <THEME>          Theme preset
+      --max-nodes <MAX_NODES>  Maximum nodes to display
+      --exclude <EXCLUDE>      Exclude glob patterns (repeatable)
+      --exclude-tags <TAGS>    Exclude tags (comma-separated)
+      --node-color-mode <MODE> Node color mode
+      --edge-color-mode <MODE> Edge color mode
+      --label-mode <MODE>      Label display mode
+      --labels                 Show all labels (shorthand for --label-mode all)
+      --no-status              Hide status bar
+      --grid                   Show grid
+      --no-minimap             Hide minimap
+      --no-legend              Hide legend
+      --background <BG>        Background style
+      --border-style <STYLE>   Border style for overlays
+      --editor <EDITOR>        Editor command to open files
+  -h, --help                   Print help
+  -V, --version                Print version
+```
+
+CLI arguments override config file values, which override defaults.
 
 ## Themes
 
@@ -244,6 +348,7 @@ The `TerminalGuard` RAII struct ensures the terminal is always properly restored
 | `petgraph` | Graph data structures |
 | `regex` | Wikilink and frontmatter parsing |
 | `toml` + `serde` | Configuration loading |
+| `clap` | CLI argument parsing |
 | `glob` | File discovery |
 
 ## Project structure
@@ -254,6 +359,7 @@ graf/
 ├── README.md
 └── src/
     ├── main.rs          # Entry point, terminal setup, event loop
+    ├── cli.rs           # CLI argument definitions (clap)
     ├── app.rs           # App state management, graph initialization
     ├── config.rs        # Config loading, 7 theme presets, color palettes
     ├── linker.rs        # File scanning, wikilink extraction, frontmatter parsing

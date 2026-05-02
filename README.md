@@ -433,7 +433,3 @@ graf/
 - **Title fallback**: Frontmatter → first `# heading` → filename stem
 - **Nodes without tags**: Default to `Color::Gray` in tag mode
 - **Config errors**: Invalid values show popup with valid suggestions
-
-## License
-
-MIT

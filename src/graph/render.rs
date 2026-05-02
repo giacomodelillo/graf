@@ -515,15 +515,23 @@ pub fn draw_graph_view(
         ) {
             b
         } else {
-            b.borders(ratatui::widgets::Borders::ALL)
+            let mut block = b.borders(ratatui::widgets::Borders::ALL)
                 .border_type(border_type)
                 .border_style(ratatui::style::Style::default().fg(colors.border_color))
                 .title(config.expand_border_title())
-                .title_style(ratatui::style::Style::default().fg(colors.title_color))
+                .title_style(ratatui::style::Style::default().fg(colors.title_color));
+            
+            // Add background color to block for solid background mode
+            if let Some(bg) = colors.background_color {
+                block = block.style(ratatui::style::Style::default().bg(bg));
+            }
+            
+            block
         }
     };
 
     let canvas = Canvas::default()
+        .background_color(colors.background_color.unwrap_or(Color::Reset))
         .x_bounds(x_bounds)
         .y_bounds(y_bounds)
         .block(block)
@@ -531,17 +539,6 @@ pub fn draw_graph_view(
             config.visual.canvas_marker.clone(),
         ))
         .paint(move |ctx| {
-            if let Some(bg) = colors.background_color {
-                let width = x_bounds[1] - x_bounds[0];
-                let height = y_bounds[1] - y_bounds[0];
-                ctx.draw(&Rectangle {
-                    x: x_bounds[0],
-                    y: y_bounds[0],
-                    width,
-                    height,
-                    color: bg,
-                });
-            }
             if flags.show_grid {
                 draw_grid(
                     ctx,

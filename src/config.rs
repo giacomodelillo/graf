@@ -21,6 +21,9 @@ pub enum Theme {
     RosePine,
     Everforest,
     Kanagawa,
+    GruvboxLight,
+    GitHubLight,
+    OneLight,
 }
 
 impl FromStr for Theme {
@@ -38,6 +41,9 @@ impl FromStr for Theme {
             "rose_pine" | "rosepine" => Ok(Theme::RosePine),
             "everforest" => Ok(Theme::Everforest),
             "kanagawa" => Ok(Theme::Kanagawa),
+            "gruvbox_light" | "gruvboxlight" => Ok(Theme::GruvboxLight),
+            "github_light" | "githublight" => Ok(Theme::GitHubLight),
+            "one_light" | "onelight" => Ok(Theme::OneLight),
             _ => Err(format!("Unknown theme: {}", s)),
         }
     }
@@ -920,20 +926,20 @@ impl GrafConfig {
                     Color::Rgb(235, 160, 172), // red
                     Color::Rgb(180, 190, 254), // lavender
                 ],
-                edge_color: Color::Rgb(179, 182, 196),
-                border_color: Color::Rgb(179, 182, 196),
+                edge_color: Color::Rgb(76, 79, 105),
+                border_color: Color::Rgb(76, 79, 105),
                 title_color: Color::Rgb(137, 180, 250),
                 label_color: Color::Rgb(76, 79, 105),
                 legend_text_color: Color::Rgb(76, 79, 105),
-                legend_border_color: Color::Rgb(179, 182, 196),
+                legend_border_color: Color::Rgb(76, 79, 105),
                 selected_indicator_color: Color::Rgb(76, 79, 105),
                 grid_color: Color::Rgb(209, 213, 228),
                 background_color: match self.visual.background {
                     Background::Transparent => None,
                     Background::Solid => Some(Color::Rgb(239, 241, 245)),
                 },
-                status_bar_color: Color::Rgb(179, 182, 196),
-                minimap_border_color: Color::Rgb(179, 182, 196),
+                status_bar_color: Color::Rgb(76, 79, 105),
+                minimap_border_color: Color::Rgb(76, 79, 105),
                 minimap_viewport_color: Color::Rgb(76, 79, 105),
                 minimap_bg_color: Some(Color::Rgb(239, 241, 245)),
             },
@@ -1021,6 +1027,91 @@ impl GrafConfig {
                 minimap_viewport_color: Color::Rgb(98, 114, 164),
                 minimap_bg_color: Some(Color::Rgb(26, 30, 48)),
             },
+            Theme::GruvboxLight => ThemeColors {
+                node_colors: vec![
+                    Color::Rgb(204, 36, 29),   // red
+                    Color::Rgb(152, 151, 26),   // green
+                    Color::Rgb(215, 153, 33),   // yellow
+                    Color::Rgb(69, 133, 136),   // blue
+                    Color::Rgb(177, 98, 134),   // purple
+                    Color::Rgb(104, 157, 106),  // aqua
+                    Color::Rgb(214, 93, 14),    // orange
+                    Color::Rgb(168, 153, 132),  // gray
+                ],
+                edge_color: Color::Rgb(60, 56, 54),
+                border_color: Color::Rgb(60, 56, 54),
+                title_color: Color::Rgb(69, 133, 136),
+                label_color: Color::Rgb(60, 56, 54),
+                legend_text_color: Color::Rgb(60, 56, 54),
+                legend_border_color: Color::Rgb(60, 56, 54),
+                selected_indicator_color: Color::Rgb(60, 56, 54),
+                grid_color: Color::Rgb(210, 195, 160),
+                background_color: match self.visual.background {
+                    Background::Transparent => None,
+                    Background::Solid => Some(Color::Rgb(251, 241, 199)),
+                },
+                status_bar_color: Color::Rgb(60, 56, 54),
+                minimap_border_color: Color::Rgb(60, 56, 54),
+                minimap_viewport_color: Color::Rgb(60, 56, 54),
+                minimap_bg_color: Some(Color::Rgb(251, 241, 199)),
+            },
+            Theme::GitHubLight => ThemeColors {
+                node_colors: vec![
+                    Color::Rgb(9, 105, 218),   // blue
+                    Color::Rgb(26, 127, 55),   // green
+                    Color::Rgb(191, 135, 0),   // yellow
+                    Color::Rgb(207, 34, 46),   // red
+                    Color::Rgb(130, 80, 223),  // purple
+                    Color::Rgb(31, 136, 61),   // dark green
+                    Color::Rgb(33, 139, 255),  // light blue
+                    Color::Rgb(101, 109, 118), // gray
+                ],
+                edge_color: Color::Rgb(31, 35, 40),
+                border_color: Color::Rgb(31, 35, 40),
+                title_color: Color::Rgb(9, 105, 218),
+                label_color: Color::Rgb(31, 35, 40),
+                legend_text_color: Color::Rgb(31, 35, 40),
+                legend_border_color: Color::Rgb(31, 35, 40),
+                selected_indicator_color: Color::Rgb(31, 35, 40),
+                grid_color: Color::Rgb(208, 215, 222),
+                background_color: match self.visual.background {
+                    Background::Transparent => None,
+                    Background::Solid => Some(Color::Rgb(255, 255, 255)),
+                },
+                status_bar_color: Color::Rgb(31, 35, 40),
+                minimap_border_color: Color::Rgb(31, 35, 40),
+                minimap_viewport_color: Color::Rgb(31, 35, 40),
+                minimap_bg_color: Some(Color::Rgb(255, 255, 255)),
+            },
+            Theme::OneLight => ThemeColors {
+                node_colors: vec![
+                    Color::Rgb(64, 120, 242),  // blue
+                    Color::Rgb(103, 161, 68),   // green
+                    Color::Rgb(192, 139, 48),   // yellow
+                    Color::Rgb(224, 82, 82),    // red
+                    Color::Rgb(176, 111, 224),  // purple
+                    Color::Rgb(80, 161, 79),    // dark green
+                    Color::Rgb(1, 132, 188),    // cyan
+                    Color::Rgb(160, 161, 167),  // gray
+                ],
+                edge_color: Color::Rgb(56, 58, 66),
+                border_color: Color::Rgb(56, 58, 66),
+                title_color: Color::Rgb(64, 120, 242),
+                label_color: Color::Rgb(56, 58, 66),
+                legend_text_color: Color::Rgb(56, 58, 66),
+                legend_border_color: Color::Rgb(56, 58, 66),
+                selected_indicator_color: Color::Rgb(56, 58, 66),
+                grid_color: Color::Rgb(230, 230, 230),
+                background_color: match self.visual.background {
+                    Background::Transparent => None,
+                    Background::Solid => Some(Color::Rgb(250, 250, 250)),
+                },
+                status_bar_color: Color::Rgb(56, 58, 66),
+                minimap_border_color: Color::Rgb(56, 58, 66),
+                minimap_viewport_color: Color::Rgb(56, 58, 66),
+                minimap_bg_color: Some(Color::Rgb(250, 250, 250)),
+            },
+
             Theme::CatppuccinMocha => ThemeColors {
                 node_colors: vec![
                     Color::Rgb(137, 180, 250),

@@ -83,7 +83,7 @@ fn draw_config_errors(frame: &mut Frame, area: Rect, errors: &[String], config: 
 fn suggest_fix(err: &str) -> Option<String> {
     let err_lower = err.to_lowercase();
     if err_lower.contains("theme") {
-        return Some("Valid themes: default, tokyonight, catppuccinmocha, catppuccinlatte, onedark, gruvbox, dracula, nord, rosepine, everforest, kanagawa".to_string());
+        return Some("Valid themes: default, tokyonight, catppuccinmocha, catppuccinlatte, onedark, onelight, gruvbox, gruvboxlight, dracula, nord, rosepine, everforest, kanagawa, githublight".to_string());
     }
     if err_lower.contains("background") {
         return Some("Valid backgrounds: transparent, solid".to_string());

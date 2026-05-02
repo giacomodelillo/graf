@@ -330,12 +330,15 @@ Format: `GRAF_{SECTION}_{KEY}` in all caps with underscores.
 | `"catppuccin-mocha"` | Catppuccin Mocha palette |
 | `"catppuccin-latte"` | Catppuccin Latte (light) palette |
 | `"onedark"` | One Dark palette |
+| `"one-light"` | One Light palette |
 | `"gruvbox"` | Gruvbox Dark palette |
+| `"gruvbox-light"` | Gruvbox Light palette |
 | `"dracula"` | Dracula palette |
 | `"nord"` | Nord Frost palette |
 | `"rose-pine"` | Rose Pine palette |
 | `"everforest"` | Everforest palette |
 | `"kanagawa"` | Kanagawa palette |
+| `"github-light"` | GitHub Light palette |
 
 ### Default theme behavior
 

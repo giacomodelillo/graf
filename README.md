@@ -4,7 +4,6 @@ A terminal-based force-directed graph visualizer for markdown wikilinks. Run `gr
 
 > Part of **[clin-rs](https://github.com/reekta92/clin-rs)**
 
-<!-- TODO: Add screenshot -->
 <!-- ![graf demo](assets/demo.gif) -->
 
 ## Features

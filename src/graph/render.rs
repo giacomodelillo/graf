@@ -593,7 +593,6 @@ pub fn draw_graph_view(
                 node_colors: &node_own_color,
                 colors: &colors,
                 config,
-                graph_bounds: state.graph_bounds,
             },
         );
     }
@@ -691,11 +690,10 @@ struct MinimapParams<'a> {
     node_colors: &'a HashMap<NodeIndex, Color>,
     colors: &'a crate::config::ThemeColors,
     config: &'a crate::config::GrafConfig,
-    graph_bounds: (f64, f64, f64, f64),
 }
 
 fn draw_minimap(frame: &mut ratatui::Frame, area: Rect, params: MinimapParams<'_>) {
-    let (wx_min, wx_max, wy_min, wy_max) = params.graph_bounds;
+    let (wx_min, wx_max, wy_min, wy_max) = compute_graph_bounds(params.graph);
     let aspect = area.width as f64 / area.height as f64;
     let vp_x = params.viewport.x_bounds(aspect);
     let vp_y = params.viewport.y_bounds(aspect);

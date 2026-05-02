@@ -51,6 +51,9 @@ pub fn start_physics(
             if energy < 0.05 * graph.node_count() as f32 {
                 guard.is_settled = true;
             }
+
+            guard.graph_bounds =
+                super::render::compute_graph_bounds(guard.simulation.get_graph());
         }
 
         std::thread::sleep(std::time::Duration::from_millis(sleep_ms));

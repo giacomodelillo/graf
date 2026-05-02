@@ -2,38 +2,50 @@
 
 A terminal-based force-directed graph visualizer for markdown wikilinks. Run `graf` in any directory and see your markdown files as an interactive, pannable, zoomable network graph.
 
+# DISCLAIMER
+`graf` is originally meant to be a feature for my main project `clin-rs`. When this project is fully developed it will be merged with the `clin-rs` project as a "graph view" feature. Currently **all the big features are implemented** and only the testing, bugfixing phase remains. So please create a issue for any problem you encounter using `graf`!
+
+# Plans
+- [X] Custom themes -> partially implemented with color overrides.
+- [X] Hot reloading the config -> implemented in the **testing branch**.
+
 > Part of **[clin-rs](https://github.com/reekta92/clin-rs)**
 
-<!-- ![graf demo](assets/demo.gif) -->
+# Showcase
+<table>
+  <tr>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/bd3b94b3-db1c-49d8-818c-3b397f76730e" /></td>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/51a21b0e-261d-4d03-bd72-f6866a83a03d" /></td>
+  </tr>
+  <tr>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/34c3ade5-6d90-4d3b-9df1-d7b2bb400b0c" /></td>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/cae64831-faa3-445f-97e8-250be23bd05c" /></td>
+  </tr>
+  <tr>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/2a9b881d-518b-43e9-abec-763a3854ed95" /></td>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/cd2fd347-0e75-4d91-9833-063b1768e502" /></td>
+  </tr>
+  <tr>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/65a2c54c-c416-4b19-be6f-f305df9decda" /></td>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/a9fc970b-8cc3-47f7-8fd9-7a9534b1d367" /></td>
+  </tr>
+  <tr>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/b78004d4-e7ff-4bdf-a3a1-ad663f3c21ab" /></td>
+    <td><img width="1888" height="1012" alt="image" src="https://github.com/user-attachments/assets/55e9f34a-9bfa-44e8-b147-8b9ff2dda365" /></td>
+  </tr>
+</table>
+
+https://github.com/user-attachments/assets/de06ffda-a1f6-4317-9cd2-f7a222c13f18
+
+- - -
 
 ## Features
-
-**Layout & Physics**
-
-- **Force-directed layout** — runs on a background thread at ~60fps using `fdg-sim`. Repulsive forces push all nodes apart, spring forces pull connected nodes together, and optional gravity prevents drift. The simulation auto-cools when total kinetic energy drops below a threshold.
-- **Node drag** — grab any node and reposition it; the simulation incorporates the new position in real time.
-- **Auto-fit** — press `a` to frame all nodes in the viewport with configurable padding.
 
 **Link Parsing**
 
 - **Wikilinks** — extracts `[[Title]]` and `[[Title|Display Text]]` patterns from file content.
 - **Frontmatter** — reads YAML `title:` and `tags: []` from `---`-delimited blocks.
 - **Title resolution** — fallback chain: frontmatter `title:` → first `# heading` → filename stem. Links are resolved by case-insensitive matching against titles.
-
-**Visualization**
-
-- **4 node color modes** — `tag` (golden-ratio HSL per tag for maximum distinction), `folder` (color by parent directory), `link_count` (interpolated palette based on connection count), `uniform`.
-- **3 edge color modes** — `source` (inherit source node color), `target` (inherit target node color), `uniform`.
-- **Multi-tag indicators** — the primary (first) tag determines the node color; additional tags appear as small colored dots orbiting the node.
-- **3 node shapes** — circle, square, diamond (drawn as outlined polygons on the canvas).
-- **4 label modes** — `selected` (selected node only), `neighbors` (selected + connected), `all`, `none`.
-- **3 canvas markers** — braille (high detail), halfblock, dot.
-
-**Navigation**
-
-- **Minimap** — bird's-eye overview with a viewport rectangle; click or drag inside to navigate. Configurable position (4 corners) and size.
-- **Keyboard navigation** — arrow keys select the nearest node in that direction using an angle-weighted scoring function.
-- **Viewport** — smooth pan, zoom (keyboard + scroll), and auto-fit with configurable sensitivity and padding.
 
 **Search**
 
@@ -42,29 +54,30 @@ A terminal-based force-directed graph visualizer for markdown wikilinks. Run `gr
 **Configuration**
 
 - **3-layer override** — defaults → TOML config file (`~/.config/graf/config.toml`) → CLI arguments → `GRAF_*` environment variables.
-- **11 built-in themes** — default (terminal-native), Tokyo Night, Catppuccin Mocha, One Dark, Gruvbox, Dracula, Nord, Rose Pine, Everforest, Kanagawa, Solarized.
+- **11 built-in themes** — default, Tokyo Night, Catppuccin Mocha, One Dark, Gruvbox, Dracula, Nord, Rose Pine, Everforest, Kanagawa, Solarized.
 - **Hex color overrides** — per-element (`node_color`, `edge_color`, `label_color`, etc.) on top of any theme.
 - **Background modes** — `transparent` (passes through terminal transparency) or `solid` (theme background color).
 
 **Overlays**
 
+- **Minimap** - toggleable minimap that shows the entire canvas.
 - **Status bar** — template-based with variables: `{files}`, `{links}`, `{selected}`, `{date}`, `{time}`, `{size}`, `{ratio}`.
 - **Legend** — shows tag or folder color mapping; configurable position and max items.
 - **Grid overlay** — configurable number of divisions per axis.
 - **Help overlay** — press `?` for a quick reference of all controls.
 
-**Integration**
-
-- **Editor** — opens files in `$EDITOR` (or configured command) with terminal suspend/resume. The RAII `TerminalGuard` ensures the terminal is always restored, even on panic.
-- **Filtering** — exclude files by tags, glob patterns, minimum link count, or cap total nodes.
-- **Config validation** — invalid values show a popup with valid suggestions on startup.
-- **Live refresh** — press `r` to rescan files and restart the simulation without leaving the app.
-
-## Motivation
-
-[Obsidian](https://obsidian.md)'s graph view inspired this project. `graf` brings similar interactive graph visualization to the terminal — keyboard-first, runs over SSH, integrates with any `$EDITOR`, zero GUI overhead, and works inside tmux.
+- - -
 
 ## Installation
+
+### Debian, Fedora, Arch Linux
+Refer to the [releases](https://github.com/reekta92/graf/releases) page for the latest release.
+
+### Cargo
+
+```bash
+cargo install graf-rs
+```
 
 ### From source
 
@@ -74,9 +87,11 @@ cd graf
 cargo install --path .
 ```
 
-### Dependencies
+#### Dependencies
 
 - Rust 1.85+ (Edition 2024)
+
+- - -
 
 ## Usage
 
@@ -89,13 +104,13 @@ graf
 
 `graf` recursively scans the current working directory for `*.md` and `*.mdx` files, parses `[[wikilinks]]` and YAML frontmatter tags, then renders a force-directed graph in your terminal.
 
-### Opening files
-
 Double-click a node or press `Enter` to open the linked file. The editor is read from the `EDITOR` environment variable (defaults to `vim`).
 
 ```bash
 EDITOR=nvim graf
 ```
+
+- - -
 
 ## Controls
 
@@ -103,7 +118,6 @@ EDITOR=nvim graf
 
 | Key | Action |
 |-----|--------|
-| `↑` `↓` `←` `→` | Pan the view |
 | `+` `=` | Zoom in |
 | `-` | Zoom out |
 | `Enter` | Open selected file in editor |
@@ -128,7 +142,7 @@ EDITOR=nvim graf
 | Double-click | Open file in editor |
 | Double-click empty area | Deselect node |
 
-## Search
+### Search
 
 Press `f` to activate the search popup. Search matches against node titles, file paths (relative), and tags (case-insensitive).
 
@@ -144,30 +158,7 @@ Press `f` to activate the search popup. Search matches against node titles, file
 | `Ctrl+U` | Clear entire query |
 | `Ctrl+W` | Delete word backward |
 
-## Comparison with Obsidian's Graph View
-
-Obsidian's [graph view](https://help.obsidian.md/Plugins/Graph+view) was the direct inspiration for this project. Both share core capabilities: force-directed layout, node drag, pan/zoom, wikilink parsing, frontmatter tags, and search. The table below highlights where they differ:
-
-| | Obsidian Graph View | graf |
-|---|---|---|
-| Platform | GUI (Electron desktop app) | Terminal (any emulator, SSH, tmux) |
-| Input | Mouse | Mouse + full keyboard navigation |
-| Node coloring | Tag (via community plugins) | Tag, folder, link count, uniform (built-in) |
-| Node shapes | Circle only | Circle, square, diamond |
-| Minimap | No | Yes (interactive, 4 positions) |
-| Label modes | Hover to show | Selected, neighbors, all, none |
-| Config | GUI settings | TOML file + CLI flags + env vars |
-| Editor | Built-in Obsidian editor | Any `$EDITOR` (vim, nvim, helix, etc.) |
-| Live file watching | Yes | Manual refresh (`r`) |
-
-## What graf is not
-
-- **Not a markdown editor** — `graf` visualizes links between files. To edit, it opens files in your `$EDITOR`.
-- **Not a note-taking app** — it reads existing markdown directories. There is no vault, no database, no indexing service.
-- **No live filesystem watching** — files are scanned once on launch. Press `r` to rescan.
-- **No embedded note preview** — use your editor for reading and writing.
-- **No collaboration or sync** — single-user, single-session terminal tool.
-- **Not a replacement for Obsidian** — it complements terminal-centric workflows where a GUI is unavailable or unnecessary.
+- - -
 
 ## Configuration
 
@@ -359,6 +350,8 @@ Controls the force-directed layout simulation.
 |-----|------|---------|-------------|
 | `command` | string | `""` | Editor command. Falls back to `$EDITOR` env var, then `vim` |
 
+- - -
+
 ## CLI Arguments
 
 ```
@@ -386,7 +379,9 @@ Options:
   -V, --version                Print version
 ```
 
-CLI arguments override config file values, which override defaults.
+> CLI arguments override config file values, which override defaults.
+
+- - -
 
 ## Environment variables
 
@@ -406,6 +401,8 @@ Common variables:
 
 Format: `GRAF_{SECTION}_{KEY}` in all caps with underscores.
 
+- - -
+
 ## Themes
 
 ### Presets
@@ -424,14 +421,31 @@ Format: `GRAF_{SECTION}_{KEY}` in all caps with underscores.
 | `"kanagawa"` | Kanagawa palette |
 | `"solarized"` | Solarized Dark palette |
 
-### Default theme behavior
-
-When `theme = "default"`, nodes use `Color::Reset` which maps to your terminal's default foreground color. The legend and labels use `Gray` and `DarkGray` for contrast. This mode is designed to blend seamlessly with your existing terminal colorscheme.
-
 ### Background modes
 
 - `"transparent"` — The canvas background is not drawn, allowing your terminal's background (including transparency effects) to show through.
 - `"solid"` — The canvas background is filled with the theme's configured background color. Only relevant when using a non-default theme.
+
+- - -
+
+## Comparison with Obsidian's Graph View
+
+Obsidian's [graph view](https://help.obsidian.md/Plugins/Graph+view) was the direct inspiration for this project. Both share core capabilities: force-directed layout, node drag, pan/zoom, wikilink parsing, frontmatter tags, and search. The table below highlights where they differ:
+
+| | Obsidian Graph View | graf |
+|---|---|---|
+| Platform | GUI (Electron desktop app) | Terminal (any emulator, SSH, tmux) |
+| Input | Mouse | Mouse + full keyboard navigation |
+| Node coloring | Tag (via community plugins) | Tag, folder, link count, uniform (built-in) |
+| Node shapes | Circle only | Circle, square, diamond |
+| Minimap | No | Yes (interactive, 4 positions) |
+| Label modes | Hover to show | Selected, neighbors, all, none |
+| Config | GUI settings | TOML file + CLI flags + env vars |
+| Editor | Built-in Obsidian editor | Any `$EDITOR` (vim, nvim, helix, etc.) |
+| Live file watching | Yes | Manual refresh (`r`) |
+
+
+- - -
 
 ## How it works
 
@@ -459,16 +473,7 @@ Links are resolved by matching wikilink text (case-insensitive) against file tit
 
 A force-directed layout runs on a background thread at ~60fps using `fdg-sim`. Repulsive forces push all nodes apart, spring forces pull connected nodes together, and optional gravity prevents drift. The simulation auto-stops when total energy drops below a threshold.
 
-## Terminal management
-
-When opening a file in an external editor, `graf` suspends its terminal session:
-
-1. Disables raw mode
-2. Leaves the alternate screen
-3. Spawns the editor with normal terminal state
-4. On editor exit, re-enters alternate screen and re-enables raw mode
-
-The `TerminalGuard` RAII struct ensures the terminal is always properly restored on exit, including on panic or Ctrl+C.
+- - -
 
 ## Tech stack
 
@@ -484,6 +489,8 @@ The `TerminalGuard` RAII struct ensures the terminal is always properly restored
 | `glob` | File discovery |
 | `chrono` | Date/time formatting for status bar |
 | `directories` | XDG config path resolution |
+
+- - -
 
 ## Project structure
 
@@ -509,18 +516,11 @@ graf/
         └── physics.rs   # Background thread for force simulation
 ```
 
+- - -
+
 ## Performance
 
 - Simulation runs at ~60fps (default `thread_sleep_ms = 16`)
 - Simulation auto-stops when total energy drops below `0.05 * node_count`
 - Files are sorted alphabetically by path before graph construction
 - Max zoom: ~20x initial; Min zoom: 0.01 (hardcoded floor)
-
-## Edge cases
-
-- **Empty directory**: Exits with error "No markdown files found"
-- **Self-links**: Filtered out automatically
-- **Unresolved wikilinks**: Silently ignored
-- **Title fallback**: Frontmatter → first `# heading` → filename stem
-- **Nodes without tags**: Default to `Color::Gray` in tag mode
-- **Config errors**: Invalid values show popup with valid suggestions

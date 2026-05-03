@@ -65,6 +65,9 @@ impl AppState {
         crate::graph::physics::start_physics(state.clone(), config, kill_rx);
         self.graph_state = Some(state);
         self.graph_kill_tx = Some(kill_tx);
+        // Clear search state — old NodeIndex values are invalid in the new graph
+        self.search_results.clear();
+        self.search_selected = 0;
     }
 
     pub fn shutdown(&mut self) {

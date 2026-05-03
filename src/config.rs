@@ -858,6 +858,21 @@ impl GrafConfig {
                 self.interaction.zoom_factor
             ));
         }
+        // Warn if legend and minimap would overlap in the same corner
+        if self.visual.show_legend && self.visual.show_minimap {
+            let same_corner = matches!(
+                (&self.legend.position, &self.visual.minimap_position),
+                (LegendPosition::TopRight, LegendPosition::TopRight)
+                    | (LegendPosition::TopLeft, LegendPosition::TopLeft)
+                    | (LegendPosition::BottomRight, LegendPosition::BottomRight)
+                    | (LegendPosition::BottomLeft, LegendPosition::BottomLeft)
+            );
+            if same_corner {
+                errs.push(
+                    "legend.position and visual.minimap_position are in the same corner — they will overlap".to_string()
+                );
+            }
+        }
         errs
     }
 

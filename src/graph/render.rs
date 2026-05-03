@@ -4,7 +4,7 @@ use fdg_sim::petgraph::graph::NodeIndex;
 use fdg_sim::petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use ratatui::layout::Rect;
 use ratatui::style::Color;
-use ratatui::widgets::canvas::{Canvas, Line, Painter, Rectangle, Shape};
+use ratatui::widgets::canvas::{Canvas, Line, Painter, Shape};
 
 use crate::config::{
     EdgeColorMode, GrafConfig, LabelMode, LegendPosition, NodeColorMode, NodeShape, NodeSizeMode,
@@ -590,9 +590,9 @@ pub fn draw_graph_view(
             MinimapParams {
                 viewport,
                 graph,
+                graph_bounds: state.graph_bounds,
                 node_colors: &node_own_color,
                 colors: &colors,
-                config,
             },
         );
     }
@@ -687,100 +687,149 @@ pub fn compute_graph_bounds(
 struct MinimapParams<'a> {
     viewport: &'a Viewport,
     graph: &'a fdg_sim::ForceGraph<super::GraphNodeData, ()>,
+    graph_bounds: (f64, f64, f64, f64),
     node_colors: &'a HashMap<NodeIndex, Color>,
     colors: &'a crate::config::ThemeColors,
-    config: &'a crate::config::GrafConfig,
 }
 
+/// Draw the minimap using direct cell-based rendering.
+///
+/// Instead of using the Canvas widget (which maps world coordinates through a
+/// float→sub-pixel pipeline that causes boundary rounding flicker), we map
+/// world positions to integer cell coordinates with floor+clamp and write
+/// styled characters directly into the frame buffer.
 fn draw_minimap(frame: &mut ratatui::Frame, area: Rect, params: MinimapParams<'_>) {
-    let (wx_min, wx_max, wy_min, wy_max) = compute_graph_bounds(params.graph);
+    let (wx_min, wx_max, wy_min, wy_max) = params.graph_bounds;
     let aspect = area.width as f64 / area.height as f64;
     let vp_x = params.viewport.x_bounds(aspect);
     let vp_y = params.viewport.y_bounds(aspect);
 
-    let nodes_clone: Vec<(f64, f64, Color)> = params
-        .graph
-        .node_indices()
-        .map(|idx| {
-            let node = &params.graph[idx];
-            let color = params.node_colors.get(&idx).copied().unwrap_or(Color::Gray);
-            (node.location.x as f64, node.location.y as f64, color)
-        })
-        .collect();
+    // Render the border block
+    let block = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .border_style(ratatui::style::Style::default().fg(params.colors.minimap_border_color));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    let vp_color = params.colors.minimap_viewport_color;
-    let bg_color = params.colors.minimap_bg_color;
+    if inner.width == 0 || inner.height == 0 {
+        return;
+    }
 
-    let canvas = Canvas::default()
-        .x_bounds([wx_min, wx_max])
-        .y_bounds([wy_min, wy_max])
-        .block(
-            ratatui::widgets::Block::default()
-                .borders(ratatui::widgets::Borders::ALL)
-                .border_style(
-                    ratatui::style::Style::default().fg(params.colors.minimap_border_color),
-                ),
-        )
-        .marker(ratatui::symbols::Marker::from(
-            params.config.visual.minimap_marker.clone(),
-        ))
-        .paint(move |ctx| {
-            if let Some(bg) = bg_color {
-                ctx.draw(&Rectangle {
-                    x: wx_min,
-                    y: wy_min,
-                    width: wx_max - wx_min,
-                    height: wy_max - wy_min,
-                    color: bg,
-                });
+    let iw = inner.width as usize;
+    let ih = inner.height as usize;
+    let world_w = wx_max - wx_min;
+    let world_h = wy_max - wy_min;
+
+    if world_w <= 0.0 || world_h <= 0.0 {
+        return;
+    }
+
+    // Map world coordinate to cell column (0-based within inner area)
+    let world_to_col = |x: f64| -> usize {
+        let t = (x - wx_min) / world_w;
+        let col = (t * iw as f64).floor() as isize;
+        col.clamp(0, (iw as isize) - 1) as usize
+    };
+
+    // Map world coordinate to cell row (0-based within inner area, y-inverted)
+    let world_to_row = |y: f64| -> usize {
+        let t = (wy_max - y) / world_h;
+        let row = (t * ih as f64).floor() as isize;
+        row.clamp(0, (ih as isize) - 1) as usize
+    };
+
+    let buf = frame.buffer_mut();
+
+    // Fill background if configured
+    if let Some(bg) = params.colors.minimap_bg_color {
+        let bg_style = ratatui::style::Style::default().bg(bg);
+        for row in 0..ih {
+            for col in 0..iw {
+                let x = inner.x + col as u16;
+                let y = inner.y + row as u16;
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_style(bg_style);
+                }
             }
+        }
+    }
 
-            for (nx, ny, nc) in &nodes_clone {
-                ctx.draw(&Rectangle {
-                    x: *nx - 0.5,
-                    y: *ny - 0.5,
-                    width: 1.0,
-                    height: 1.0,
-                    color: *nc,
-                });
-            }
+    // Draw nodes as dot characters
+    let node_style_base = ratatui::style::Style::default();
+    for idx in params.graph.node_indices() {
+        let node = &params.graph[idx];
+        let nx = node.location.x as f64;
+        let ny = node.location.y as f64;
+        let col = world_to_col(nx);
+        let row = world_to_row(ny);
+        let color = params.node_colors.get(&idx).copied().unwrap_or(Color::Gray);
+        let x = inner.x + col as u16;
+        let y = inner.y + row as u16;
+        if let Some(cell) = buf.cell_mut((x, y)) {
+            cell.set_symbol("•");
+            cell.set_style(node_style_base.fg(color));
+        }
+    }
 
-            let vx1 = vp_x[0].max(wx_min);
-            let vx2 = vp_x[1].min(wx_max);
-            let vy1 = vp_y[0].max(wy_min);
-            let vy2 = vp_y[1].min(wy_max);
+    // Compute viewport rectangle cell bounds
+    let vp_col_min = world_to_col(vp_x[0].max(wx_min));
+    let vp_col_max = world_to_col(vp_x[1].min(wx_max));
+    let vp_row_min = world_to_row(vp_y[1].min(wy_max)); // y is inverted: max y → min row
+    let vp_row_max = world_to_row(vp_y[0].max(wy_min)); // min y → max row
 
-            if vx1 < vx2 && vy1 < vy2 {
-                ctx.draw(&Line {
-                    x1: vx1,
-                    y1: vy1,
-                    x2: vx2,
-                    y2: vy1,
-                    color: vp_color,
-                });
-                ctx.draw(&Line {
-                    x1: vx1,
-                    y1: vy2,
-                    x2: vx2,
-                    y2: vy2,
-                    color: vp_color,
-                });
-                ctx.draw(&Line {
-                    x1: vx1,
-                    y1: vy1,
-                    x2: vx1,
-                    y2: vy2,
-                    color: vp_color,
-                });
-                ctx.draw(&Line {
-                    x1: vx2,
-                    y1: vy1,
-                    x2: vx2,
-                    y2: vy2,
-                    color: vp_color,
-                });
-            }
-        });
+    if vp_col_min >= vp_col_max || vp_row_min >= vp_row_max {
+        return;
+    }
 
-    frame.render_widget(canvas, area);
+    let vp_style = ratatui::style::Style::default().fg(params.colors.minimap_viewport_color);
+
+    // Draw horizontal edges of viewport rectangle
+    for col in vp_col_min..=vp_col_max {
+        let x = inner.x + col as u16;
+        // Top edge
+        let y_top = inner.y + vp_row_min as u16;
+        if let Some(cell) = buf.cell_mut((x, y_top)) {
+            cell.set_symbol("─");
+            cell.set_style(vp_style);
+        }
+        // Bottom edge
+        let y_bot = inner.y + vp_row_max as u16;
+        if let Some(cell) = buf.cell_mut((x, y_bot)) {
+            cell.set_symbol("─");
+            cell.set_style(vp_style);
+        }
+    }
+
+    // Draw vertical edges of viewport rectangle
+    for row in vp_row_min..=vp_row_max {
+        let y = inner.y + row as u16;
+        // Left edge
+        let x_left = inner.x + vp_col_min as u16;
+        if let Some(cell) = buf.cell_mut((x_left, y)) {
+            cell.set_symbol("│");
+            cell.set_style(vp_style);
+        }
+        // Right edge
+        let x_right = inner.x + vp_col_max as u16;
+        if let Some(cell) = buf.cell_mut((x_right, y)) {
+            cell.set_symbol("│");
+            cell.set_style(vp_style);
+        }
+    }
+
+    // Draw corners (after edges so they overwrite)
+    let corners: [(usize, usize, &str); 4] = [
+        (vp_col_min, vp_row_min, "┌"),
+        (vp_col_max, vp_row_min, "┐"),
+        (vp_col_min, vp_row_max, "└"),
+        (vp_col_max, vp_row_max, "┘"),
+    ];
+    for (col, row, sym) in corners {
+        let x = inner.x + col as u16;
+        let y = inner.y + row as u16;
+        if let Some(cell) = buf.cell_mut((x, y)) {
+            cell.set_symbol(sym);
+            cell.set_style(vp_style);
+        }
+    }
 }

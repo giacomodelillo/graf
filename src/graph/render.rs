@@ -692,12 +692,12 @@ struct MinimapParams<'a> {
     colors: &'a crate::config::ThemeColors,
 }
 
-/// Draw the minimap using direct cell-based rendering.
+/// Draw the minimap using half-block sub-cell rendering.
 ///
-/// Instead of using the Canvas widget (which maps world coordinates through a
-/// float→sub-pixel pipeline that causes boundary rounding flicker), we map
-/// world positions to integer cell coordinates with floor+clamp and write
-/// styled characters directly into the frame buffer.
+/// Each terminal cell represents 2 vertical sub-pixels via `▀`, `▄`, or `█`
+/// characters, giving 2× vertical resolution compared to one-char-per-cell.
+/// World coordinates are mapped to integer sub-pixel positions with floor+clamp
+/// — fully deterministic, no boundary rounding flicker.
 fn draw_minimap(frame: &mut ratatui::Frame, area: Rect, params: MinimapParams<'_>) {
     let (wx_min, wx_max, wy_min, wy_max) = params.graph_bounds;
     let aspect = area.width as f64 / area.height as f64;
@@ -717,6 +717,7 @@ fn draw_minimap(frame: &mut ratatui::Frame, area: Rect, params: MinimapParams<'_
 
     let iw = inner.width as usize;
     let ih = inner.height as usize;
+    let sub_h = ih * 2; // 2 vertical sub-pixels per cell
     let world_w = wx_max - wx_min;
     let world_h = wy_max - wy_min;
 
@@ -724,57 +725,100 @@ fn draw_minimap(frame: &mut ratatui::Frame, area: Rect, params: MinimapParams<'_
         return;
     }
 
-    // Map world coordinate to cell column (0-based within inner area)
+    // Map world coordinate to sub-pixel column (0-based, same as cell column)
     let world_to_col = |x: f64| -> usize {
         let t = (x - wx_min) / world_w;
         let col = (t * iw as f64).floor() as isize;
         col.clamp(0, (iw as isize) - 1) as usize
     };
 
-    // Map world coordinate to cell row (0-based within inner area, y-inverted)
+    // Map world coordinate to sub-pixel row (0-based, y-inverted, 2× resolution)
+    let world_to_subrow = |y: f64| -> usize {
+        let t = (wy_max - y) / world_h;
+        let row = (t * sub_h as f64).floor() as isize;
+        row.clamp(0, (sub_h as isize) - 1) as usize
+    };
+
+    // Map world coordinate to cell row (for viewport rectangle)
     let world_to_row = |y: f64| -> usize {
         let t = (wy_max - y) / world_h;
         let row = (t * ih as f64).floor() as isize;
         row.clamp(0, (ih as isize) - 1) as usize
     };
 
-    let buf = frame.buffer_mut();
+    // Sub-pixel color grid: each entry is an optional color
+    // Layout: grid[sub_row * iw + col]
+    let mut grid: Vec<Option<Color>> = vec![None; sub_h * iw];
 
-    // Fill background if configured
-    if let Some(bg) = params.colors.minimap_bg_color {
-        let bg_style = ratatui::style::Style::default().bg(bg);
-        for row in 0..ih {
-            for col in 0..iw {
-                let x = inner.x + col as u16;
-                let y = inner.y + row as u16;
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    cell.set_style(bg_style);
-                }
-            }
-        }
-    }
-
-    // Draw nodes as dot characters
-    let node_style_base = ratatui::style::Style::default();
+    // Plot nodes into the sub-pixel grid
     for idx in params.graph.node_indices() {
         let node = &params.graph[idx];
         let nx = node.location.x as f64;
         let ny = node.location.y as f64;
         let col = world_to_col(nx);
-        let row = world_to_row(ny);
+        let sub_row = world_to_subrow(ny);
         let color = params.node_colors.get(&idx).copied().unwrap_or(Color::Gray);
-        let x = inner.x + col as u16;
-        let y = inner.y + row as u16;
-        if let Some(cell) = buf.cell_mut((x, y)) {
-            cell.set_symbol("•");
-            cell.set_style(node_style_base.fg(color));
+        grid[sub_row * iw + col] = Some(color);
+    }
+
+    let buf = frame.buffer_mut();
+    let bg_color = params.colors.minimap_bg_color;
+
+    // Composite sub-pixel grid into half-block characters
+    for cell_row in 0..ih {
+        let top_sub = cell_row * 2;
+        let bot_sub = cell_row * 2 + 1;
+        for col in 0..iw {
+            let top_color = grid[top_sub * iw + col];
+            let bot_color = grid[bot_sub * iw + col];
+
+            let x = inner.x + col as u16;
+            let y = inner.y + cell_row as u16;
+
+            let cell = match buf.cell_mut((x, y)) {
+                Some(c) => c,
+                None => continue,
+            };
+
+            match (top_color, bot_color) {
+                (None, None) => {
+                    // Empty cell — set background if configured
+                    if let Some(bg) = bg_color {
+                        cell.set_symbol(" ");
+                        cell.set_style(ratatui::style::Style::default().bg(bg));
+                    }
+                }
+                (Some(tc), None) => {
+                    // Only top sub-pixel set: upper half block
+                    cell.set_symbol("▀");
+                    let mut style = ratatui::style::Style::default().fg(tc);
+                    if let Some(bg) = bg_color {
+                        style = style.bg(bg);
+                    }
+                    cell.set_style(style);
+                }
+                (None, Some(bc)) => {
+                    // Only bottom sub-pixel set: lower half block
+                    cell.set_symbol("▄");
+                    let mut style = ratatui::style::Style::default().fg(bc);
+                    if let Some(bg) = bg_color {
+                        style = style.bg(bg);
+                    }
+                    cell.set_style(style);
+                }
+                (Some(tc), Some(bc)) => {
+                    // Both sub-pixels set: lower half block with fg=bottom, bg=top
+                    cell.set_symbol("▄");
+                    cell.set_style(ratatui::style::Style::default().fg(bc).bg(tc));
+                }
+            }
         }
     }
 
     // Compute viewport rectangle cell bounds
     let vp_col_min = world_to_col(vp_x[0].max(wx_min));
     let vp_col_max = world_to_col(vp_x[1].min(wx_max));
-    let vp_row_min = world_to_row(vp_y[1].min(wy_max)); // y is inverted: max y → min row
+    let vp_row_min = world_to_row(vp_y[1].min(wy_max)); // y inverted: max y → min row
     let vp_row_max = world_to_row(vp_y[0].max(wy_min)); // min y → max row
 
     if vp_col_min >= vp_col_max || vp_row_min >= vp_row_max {
@@ -833,3 +877,4 @@ fn draw_minimap(frame: &mut ratatui::Frame, area: Rect, params: MinimapParams<'_
         }
     }
 }
+

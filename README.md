@@ -118,8 +118,9 @@ EDITOR=nvim graf
 
 | Key | Action |
 |-----|--------|
-| `+` `=` | Zoom in |
-| `-` | Zoom out |
+| `↑` `↓` `←` `→` / `k` `j` `h` `l` | Pan view |
+| `+` `=` / `Ctrl+J` | Zoom in |
+| `-` / `Ctrl+K` | Zoom out |
 | `Enter` | Open selected file in editor |
 | `a` | Auto-fit view to all nodes |
 | `f` | Activate search |

@@ -23,39 +23,54 @@ pub fn start_physics(
         };
 
         if should_update {
-            let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
-            guard.simulation.update(timestep as f32);
+            // Acquire write lock for simulation update only
+            let new_bounds = {
+                let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
+                guard.simulation.update(timestep as f32);
 
-            // If a node is being dragged, override its location to the drag target
-            if let Some((tx, ty)) = guard.drag_target
-                && let Some(idx) = guard.dragging_node {
+                // Override dragged node position *before* computing bounds
+                // so the bounds always include the drag target position.
+                if let Some((tx, ty)) = guard.drag_target
+                    && let Some(idx) = guard.dragging_node {
+                        let graph = guard.simulation.get_graph_mut();
+                        if let Some(node) = graph.node_weight_mut(idx) {
+                            node.location.x = tx;
+                            node.location.y = ty;
+                            node.velocity = fdg_sim::glam::Vec3::ZERO;
+                        }
+                    }
+
+                if gravity > 0.0 {
                     let graph = guard.simulation.get_graph_mut();
-                    if let Some(node) = graph.node_weight_mut(idx) {
-                        node.location.x = tx;
-                        node.location.y = ty;
-                        node.velocity = fdg_sim::glam::Vec3::ZERO;
+                    for node in graph.node_weights_mut() {
+                        node.velocity.x -= node.location.x * gravity as f32;
+                        node.velocity.y -= node.location.y * gravity as f32;
                     }
                 }
 
-            if gravity > 0.0 {
-                let graph = guard.simulation.get_graph_mut();
-                for node in graph.node_weights_mut() {
-                    node.velocity.x -= node.location.x * gravity as f32;
-                    node.velocity.y -= node.location.y * gravity as f32;
+                let graph = guard.simulation.get_graph();
+                let energy: f32 = graph.node_weights().map(|n| n.velocity.length()).sum();
+
+                if energy < 0.05 * graph.node_count() as f32 {
+                    guard.is_settled = true;
                 }
+
+                // Compute bounds while we still hold the lock (graph data needed)
+                super::render::compute_graph_bounds(guard.simulation.get_graph())
+            }; // write lock released here
+
+            // Update bounds with a short separate write lock
+            {
+                let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
+                guard.graph_bounds = new_bounds;
             }
-
-            let graph = guard.simulation.get_graph();
-            let energy: f32 = graph.node_weights().map(|n| n.velocity.length()).sum();
-
-            if energy < 0.05 * graph.node_count() as f32 {
-                guard.is_settled = true;
-            }
-
-            guard.graph_bounds =
-                super::render::compute_graph_bounds(guard.simulation.get_graph());
+        } else {
+            // Graph is settled — sleep longer to avoid wasting CPU
+            std::thread::sleep(std::time::Duration::from_millis(sleep_ms * 6));
+            continue;
         }
 
         std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
     });
 }
+

@@ -78,14 +78,22 @@ impl Drop for TerminalGuard {
 enum EventAction {
     Quit,
     OpenFile(String),
+    ReloadConfig,
+}
+
+struct ReloadCtx<'a> {
+    config_path: &'a Option<std::path::PathBuf>,
+    cli: &'a cli::Cli,
+    cwd: &'a std::path::PathBuf,
 }
 
 fn dispatch_action(
     action: EventAction,
     app_state: &mut app::AppState,
     guard: &mut TerminalGuard,
-    config: &config::GrafConfig,
+    config: &mut config::GrafConfig,
     running: &mut bool,
+    reload_ctx: &ReloadCtx<'_>,
 ) -> Result<()> {
     match action {
         EventAction::Quit => {
@@ -96,6 +104,45 @@ fn dispatch_action(
             guard.suspend()?;
             open_file_in_editor(&path, config);
             guard.resume()?;
+        }
+        EventAction::ReloadConfig => {
+            let old_physics = config.physics.clone();
+            let old_filter = config.filter.clone();
+
+            let (new_config, errors) =
+                config::GrafConfig::reload_from_path(reload_ctx.config_path.as_ref());
+            *config = new_config;
+            apply_cli_overrides(config, reload_ctx.cli);
+            let validation_errors = config.validate();
+
+            if errors.is_empty() && validation_errors.is_empty() {
+                app_state.config_reload_msg = Some("Config reloaded".to_string());
+                app_state.config_errors.clear();
+            } else {
+                let mut all_errs = errors;
+                all_errs.extend(validation_errors);
+                app_state.config_errors = all_errs.clone();
+                app_state.config_reload_msg = Some(format!("Config error: {}", all_errs.join("; ")));
+            }
+            app_state.config_reload_ttl = 60;
+
+            if config.physics != old_physics {
+                app_state.refresh_simulation(config);
+            }
+            if config.filter != old_filter {
+                let files = linker::scan_markdown_files(
+                    reload_ctx.cwd,
+                    &config.filter.exclude_patterns,
+                    config.filter.max_nodes,
+                );
+                app_state.files = files;
+                app_state.refresh_simulation(config);
+            }
+
+            app_state.show_minimap = config.visual.show_minimap;
+            app_state.show_legend = config.visual.show_legend;
+            app_state.show_grid = config.visual.show_grid;
+            app_state.show_status_bar = config.display.show_status_bar;
         }
     }
     Ok(())
@@ -158,6 +205,9 @@ fn handle_event(
                     GraphAction::Refresh => {
                         app_state.refresh_simulation(config);
                         return Ok(None);
+                    }
+                    GraphAction::ReloadConfig => {
+                        return Ok(Some(EventAction::ReloadConfig));
                     }
                 }
             }
@@ -247,7 +297,7 @@ fn main() -> Result<()> {
         .clone()
         .or_else(|| config::GrafConfig::config_path().ok());
     let (mut config, mut config_errors, config_created) =
-        config::GrafConfig::load_from_path(config_path);
+        config::GrafConfig::load_from_path(config_path.clone());
     if config_created {
         eprintln!(
             "Created default config at {}",
@@ -281,6 +331,12 @@ fn main() -> Result<()> {
     let mut app_state = app::AppState::new(&config, files, config_errors);
     let mut running = true;
 
+    let reload_ctx = ReloadCtx {
+        config_path: &config_path,
+        cli: &cli,
+        cwd: &cwd,
+    };
+
     while running {
         guard.as_mut().draw(|frame| {
             ui::draw_ui(frame, &app_state, &config);
@@ -289,17 +345,24 @@ fn main() -> Result<()> {
         if event::poll(std::time::Duration::from_millis(16))? {
             let ev = event::read()?;
             if let Some(action) = handle_event(ev, &mut app_state, &config, &guard)? {
-                dispatch_action(action, &mut app_state, &mut guard, &config, &mut running)?;
+                dispatch_action(action, &mut app_state, &mut guard, &mut config, &mut running, &reload_ctx)?;
             }
             while event::poll(std::time::Duration::ZERO)? {
                 let ev = event::read()?;
                 if let Some(action) = handle_event(ev, &mut app_state, &config, &guard)? {
                     if matches!(action, EventAction::Quit) {
-                        dispatch_action(action, &mut app_state, &mut guard, &config, &mut running)?;
+                        dispatch_action(action, &mut app_state, &mut guard, &mut config, &mut running, &reload_ctx)?;
                         break;
                     }
-                    dispatch_action(action, &mut app_state, &mut guard, &config, &mut running)?;
+                    dispatch_action(action, &mut app_state, &mut guard, &mut config, &mut running, &reload_ctx)?;
                 }
+            }
+        }
+
+        if app_state.config_reload_ttl > 0 {
+            app_state.config_reload_ttl -= 1;
+            if app_state.config_reload_ttl == 0 {
+                app_state.config_reload_msg = None;
             }
         }
     }

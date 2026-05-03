@@ -3,8 +3,9 @@ pub mod physics;
 pub mod render;
 pub mod viewport;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::Mutex;
 
 use fdg_sim::petgraph::graph::NodeIndex;
 use fdg_sim::{ForceGraph, ForceGraphHelper, Simulation, SimulationParameters};
@@ -42,6 +43,7 @@ pub struct GraphState {
     pub drag_target: Option<(f32, f32)>,
     pub is_settled: bool,
     pub graph_bounds: (f64, f64, f64, f64),
+    pub render_cache: Mutex<render::RenderCache>,
 }
 
 impl GraphState {
@@ -56,6 +58,7 @@ impl GraphState {
             drag_target: None,
             is_settled: false,
             graph_bounds: (0.0, 0.0, 0.0, 0.0),
+            render_cache: Mutex::new(render::RenderCache::new()),
         };
         state.viewport = state.viewport.auto_fit_from_graph(
             state.simulation.get_graph(),
@@ -96,12 +99,13 @@ pub fn build_graph(files: &[FileData], config: &GrafConfig) -> ForceGraph<GraphN
         path_to_index.insert(file.relative_path.clone(), idx);
     }
 
+    let mut edge_set: HashSet<(NodeIndex, NodeIndex)> = HashSet::new();
     for (source, targets) in &links {
         if let Some(&source_idx) = path_to_index.get(source) {
             for target in targets {
                 if let Some(&target_idx) = path_to_index.get(target)
                     && source_idx != target_idx
-                    && graph.edges_connecting(source_idx, target_idx).count() == 0
+                    && edge_set.insert((source_idx, target_idx))
                 {
                     graph.add_edge(source_idx, target_idx, ());
                 }

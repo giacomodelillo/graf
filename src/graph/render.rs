@@ -4,7 +4,7 @@ use fdg_sim::petgraph::graph::NodeIndex;
 use fdg_sim::petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use ratatui::layout::Rect;
 use ratatui::style::Color;
-use ratatui::widgets::canvas::{Canvas, Line, Painter, Rectangle, Shape};
+use ratatui::widgets::canvas::{Canvas, Line, Painter, Shape};
 
 use crate::config::{
     EdgeColorMode, GrafConfig, LabelMode, LegendPosition, NodeColorMode, NodeShape, NodeSizeMode,
@@ -31,13 +31,13 @@ fn link_count_color(count: usize, max_count: usize, colors: &[Color]) -> Color {
 }
 
 #[derive(Clone)]
-struct EdgeData {
-    x1: f64,
-    y1: f64,
-    x2: f64,
-    y2: f64,
-    color: Color,
-    thickness: u16,
+pub(crate) struct EdgeData {
+    pub x1: f64,
+    pub y1: f64,
+    pub x2: f64,
+    pub y2: f64,
+    pub color: Color,
+    pub thickness: u16,
 }
 
 struct GraphEdgesShape {
@@ -47,7 +47,7 @@ struct GraphEdgesShape {
 impl Shape for GraphEdgesShape {
     fn draw(&self, painter: &mut Painter) {
         for edge in &self.edges {
-            for _ in 0..edge.thickness {
+            if edge.thickness <= 1 {
                 Line {
                     x1: edge.x1,
                     y1: edge.y1,
@@ -56,21 +56,40 @@ impl Shape for GraphEdgesShape {
                     color: edge.color,
                 }
                 .draw(painter);
+            } else {
+                // Compute perpendicular offset direction for visual thickness
+                let dx = edge.x2 - edge.x1;
+                let dy = edge.y2 - edge.y1;
+                let len = (dx * dx + dy * dy).sqrt().max(1e-6);
+                let nx = -dy / len; // perpendicular unit vector
+                let ny = dx / len;
+                let spacing = 0.4;
+                for t in 0..edge.thickness {
+                    let offset = (t as f64 - (edge.thickness - 1) as f64 / 2.0) * spacing;
+                    Line {
+                        x1: edge.x1 + nx * offset,
+                        y1: edge.y1 + ny * offset,
+                        x2: edge.x2 + nx * offset,
+                        y2: edge.y2 + ny * offset,
+                        color: edge.color,
+                    }
+                    .draw(painter);
+                }
             }
         }
     }
 }
 
 #[derive(Clone)]
-struct NodeRenderData {
-    x: f64,
-    y: f64,
-    color: Color,
-    radius: f64,
-    extra_tag_colors: Vec<Color>,
-    is_selected: bool,
-    selection_ring_color: Color,
-    shape: NodeShape,
+pub(crate) struct NodeRenderData {
+    pub x: f64,
+    pub y: f64,
+    pub color: Color,
+    pub radius: f64,
+    pub extra_tag_colors: Vec<Color>,
+    pub is_selected: bool,
+    pub selection_ring_color: Color,
+    pub shape: NodeShape,
 }
 
 struct GraphNodesShape {
@@ -216,10 +235,10 @@ impl Shape for GraphNodesShape {
 }
 
 #[derive(Clone)]
-struct LabelData {
-    x: f64,
-    y: f64,
-    text: String,
+pub(crate) struct LabelData {
+    pub x: f64,
+    pub y: f64,
+    pub text: String,
 }
 
 pub struct FeatureFlags {
@@ -227,6 +246,274 @@ pub struct FeatureFlags {
     pub show_grid: bool,
     pub show_minimap: bool,
     pub show_status_bar: bool,
+}
+
+/// Persistent cache for render data that avoids per-frame allocations.
+///
+/// Topology-dependent data (color maps, legend) is rebuilt only when
+/// `topology_dirty` is set. Position-dependent buffers (edges, nodes,
+/// labels, minimap grid) are cleared and refilled each frame, but
+/// their underlying Vec capacity is retained across frames.
+pub struct RenderCache {
+    // Topology-dependent (rebuilt when graph structure or config changes)
+    pub tag_colors: HashMap<String, Color>,
+    pub folder_colors: HashMap<String, Color>,
+    pub node_own_color: HashMap<NodeIndex, Color>,
+    pub legend_data: Option<Vec<(String, Color)>>,
+    pub max_link_count: usize,
+
+    // Reusable position-dependent buffers
+    pub edges: Vec<EdgeData>,
+    pub nodes: Vec<NodeRenderData>,
+    pub labels: Vec<LabelData>,
+
+    // Minimap reusable buffer
+    pub minimap_grid: Vec<Option<Color>>,
+
+    /// Set to true when graph topology or config changes.
+    pub topology_dirty: bool,
+}
+
+impl RenderCache {
+    pub fn new() -> Self {
+        Self {
+            tag_colors: HashMap::new(),
+            folder_colors: HashMap::new(),
+            node_own_color: HashMap::new(),
+            legend_data: None,
+            max_link_count: 0,
+            edges: Vec::new(),
+            nodes: Vec::new(),
+            labels: Vec::new(),
+            minimap_grid: Vec::new(),
+            topology_dirty: true,
+        }
+    }
+
+    /// Rebuild topology-dependent caches (color maps, legend data).
+    pub fn rebuild_topology(
+        &mut self,
+        graph: &fdg_sim::ForceGraph<super::GraphNodeData, ()>,
+        config: &GrafConfig,
+        colors: &crate::config::ThemeColors,
+        show_legend: bool,
+    ) {
+        // max_link_count
+        self.max_link_count = graph
+            .node_weights()
+            .map(|n| n.data.link_count)
+            .max()
+            .unwrap_or(0);
+
+        // tag_colors
+        self.tag_colors.clear();
+        {
+            let mut unique_tags: HashSet<String> = HashSet::new();
+            for node in graph.node_weights() {
+                for tag in &node.data.tags {
+                    unique_tags.insert(tag.clone());
+                }
+            }
+            let mut sorted_tags: Vec<String> = unique_tags.into_iter().collect();
+            sorted_tags.sort();
+            let total = sorted_tags.len().max(1);
+            for (i, tag) in sorted_tags.into_iter().enumerate() {
+                let c = tag_color(&tag, i, total, &colors.node_colors);
+                self.tag_colors.insert(tag, c);
+            }
+        }
+
+        // folder_colors
+        self.folder_colors.clear();
+        {
+            let mut unique_folders: HashSet<String> = HashSet::new();
+            for node in graph.node_weights() {
+                unique_folders.insert(node.data.folder.clone());
+            }
+            let mut sorted_folders: Vec<String> = unique_folders.into_iter().collect();
+            sorted_folders.sort();
+            let total = sorted_folders.len().max(1);
+            for (i, f) in sorted_folders.into_iter().enumerate() {
+                let c = tag_color(&f, i, total, &colors.node_colors);
+                self.folder_colors.insert(f, c);
+            }
+        }
+
+        // node_own_color
+        self.node_own_color.clear();
+        for idx in graph.node_indices() {
+            let node = &graph[idx];
+            let color = match config.visual.node_color_mode {
+                NodeColorMode::Tag => {
+                    if let Some(tag) = node.data.tags.first() {
+                        self.tag_colors.get(tag).copied().unwrap_or(Color::Gray)
+                    } else {
+                        Color::Gray
+                    }
+                }
+                NodeColorMode::Folder => self
+                    .folder_colors
+                    .get(&node.data.folder)
+                    .copied()
+                    .unwrap_or(Color::Gray),
+                NodeColorMode::LinkCount => {
+                    link_count_color(node.data.link_count, self.max_link_count, &colors.node_colors)
+                }
+                NodeColorMode::Uniform => {
+                    colors.node_colors.first().copied().unwrap_or(Color::Gray)
+                }
+            };
+            self.node_own_color.insert(idx, color);
+        }
+
+        // legend_data
+        self.legend_data = if show_legend {
+            let items = match config.visual.node_color_mode {
+                NodeColorMode::Folder => &self.folder_colors,
+                _ => &self.tag_colors,
+            };
+            if items.is_empty() {
+                None
+            } else {
+                let mut sorted: Vec<_> = items.iter().collect();
+                sorted.sort_by_key(|(t, _)| t.as_str());
+                sorted.truncate(config.legend.max_items);
+                Some(sorted.into_iter().map(|(t, c)| (t.clone(), *c)).collect())
+            }
+        } else {
+            None
+        };
+
+        self.topology_dirty = false;
+    }
+
+    /// Fill the edges buffer from current node positions.
+    pub fn fill_edges(
+        &mut self,
+        graph: &fdg_sim::ForceGraph<super::GraphNodeData, ()>,
+        config: &GrafConfig,
+        edge_color: Color,
+    ) {
+        self.edges.clear();
+        for edge in graph.edge_references() {
+            let src = &graph[edge.source()];
+            let tgt = &graph[edge.target()];
+            let color = match config.visual.edge_color_mode {
+                EdgeColorMode::Source => *self
+                    .node_own_color
+                    .get(&edge.source())
+                    .unwrap_or(&edge_color),
+                EdgeColorMode::Target => *self
+                    .node_own_color
+                    .get(&edge.target())
+                    .unwrap_or(&edge_color),
+                EdgeColorMode::Uniform => edge_color,
+            };
+            self.edges.push(EdgeData {
+                x1: src.location.x as f64,
+                y1: src.location.y as f64,
+                x2: tgt.location.x as f64,
+                y2: tgt.location.y as f64,
+                color,
+                thickness: config.visual.edge_thickness,
+            });
+        }
+    }
+
+    /// Fill the nodes buffer from current node positions.
+    pub fn fill_nodes(
+        &mut self,
+        graph: &fdg_sim::ForceGraph<super::GraphNodeData, ()>,
+        config: &GrafConfig,
+        selected_node: Option<NodeIndex>,
+        selection_ring_color: Color,
+    ) {
+        self.nodes.clear();
+        for idx in graph.node_indices() {
+            let node = &graph[idx];
+            let primary_color = self.node_own_color.get(&idx).copied().unwrap_or(Color::Gray);
+            let radius = match config.visual.node_size_mode {
+                NodeSizeMode::Fixed => config.visual.node_size,
+                NodeSizeMode::LinkCount => {
+                    if self.max_link_count == 0 {
+                        config.visual.node_size
+                    } else {
+                        config.visual.node_size
+                            * (1.0
+                                + (node.data.link_count as f64 / self.max_link_count as f64)
+                                    * 1.5)
+                    }
+                }
+            };
+            let extra_tag_colors: Vec<Color> = if node.data.tags.is_empty() {
+                Vec::new()
+            } else {
+                node.data
+                    .tags
+                    .iter()
+                    .skip(1)
+                    .filter_map(|tag| self.tag_colors.get(tag).copied())
+                    .collect()
+            };
+            self.nodes.push(NodeRenderData {
+                x: node.location.x as f64,
+                y: node.location.y as f64,
+                color: primary_color,
+                radius,
+                extra_tag_colors,
+                is_selected: selected_node == Some(idx),
+                selection_ring_color,
+                shape: config.visual.node_shape,
+            });
+        }
+    }
+
+    /// Fill the labels buffer from current node positions.
+    pub fn fill_labels(
+        &mut self,
+        graph: &fdg_sim::ForceGraph<super::GraphNodeData, ()>,
+        config: &GrafConfig,
+        selected_node: Option<NodeIndex>,
+    ) {
+        self.labels.clear();
+        let should_show = |idx: NodeIndex| -> bool {
+            match config.visual.label_mode {
+                LabelMode::Selected => selected_node == Some(idx),
+                LabelMode::Neighbors => {
+                    if selected_node == Some(idx) {
+                        return true;
+                    }
+                    if let Some(sel) = selected_node {
+                        for edge in graph.edges(sel) {
+                            if edge.target() == idx || edge.source() == idx {
+                                return true;
+                            }
+                        }
+                    }
+                    false
+                }
+                LabelMode::All => true,
+                LabelMode::None => false,
+            }
+        };
+
+        for idx in graph.node_indices() {
+            if !should_show(idx) {
+                continue;
+            }
+            let node = &graph[idx];
+            let radius = self
+                .nodes
+                .get(idx.index())
+                .map(|n| n.radius)
+                .unwrap_or(2.0);
+            self.labels.push(LabelData {
+                x: node.location.x as f64,
+                y: node.location.y as f64 + radius + config.visual.label_offset,
+                text: crate::util::truncate(&node.data.title, config.visual.label_max_length),
+            });
+        }
+    }
 }
 
 pub fn draw_graph_view(
@@ -241,190 +528,28 @@ pub fn draw_graph_view(
     let colors = config.theme_colors();
     let graph = state.simulation.get_graph();
 
-    let max_link_count = graph
-        .node_weights()
-        .map(|n| n.data.link_count)
-        .max()
-        .unwrap_or(0);
+    // Update render cache
+    let mut cache = state.render_cache.lock().unwrap_or_else(|e| e.into_inner());
 
-    let tag_colors: HashMap<String, Color> = {
-        let mut unique_tags: HashSet<String> = HashSet::new();
-        for node in graph.node_weights() {
-            for tag in &node.data.tags {
-                unique_tags.insert(tag.clone());
-            }
-        }
-        let mut unique_tags: Vec<String> = unique_tags.into_iter().collect();
-        unique_tags.sort();
-        let total = unique_tags.len().max(1);
-        unique_tags
-            .into_iter()
-            .enumerate()
-            .map(|(i, tag)| (tag.clone(), tag_color(&tag, i, total, &colors.node_colors)))
-            .collect()
-    };
-
-    let folder_colors: HashMap<String, Color> = {
-        let mut unique_folders: HashSet<String> = HashSet::new();
-        for node in graph.node_weights() {
-            unique_folders.insert(node.data.folder.clone());
-        }
-        let mut unique_folders: Vec<String> = unique_folders.into_iter().collect();
-        unique_folders.sort();
-        let total = unique_folders.len().max(1);
-        unique_folders
-            .into_iter()
-            .enumerate()
-            .map(|(i, f)| (f.clone(), tag_color(&f, i, total, &colors.node_colors)))
-            .collect()
-    };
-
-    // Prepare legend data if needed
-    let legend_data: Option<Vec<(String, Color)>> = if flags.show_legend {
-        let items = match config.visual.node_color_mode {
-            NodeColorMode::Folder => &folder_colors,
-            _ => &tag_colors,
-        };
-        if items.is_empty() {
-            None
-        } else {
-            let mut sorted: Vec<_> = items.iter().collect();
-            sorted.sort_by_key(|(t, _)| t.as_str());
-            sorted.truncate(config.legend.max_items);
-            Some(sorted.into_iter().map(|(t, c)| (t.clone(), *c)).collect())
-        }
-    } else {
-        None
-    };
-
-    let mut node_own_color: HashMap<NodeIndex, Color> = HashMap::new();
-    for idx in graph.node_indices() {
-        let node = &graph[idx];
-        node_own_color.insert(
-            idx,
-            match config.visual.node_color_mode {
-                NodeColorMode::Tag => {
-                    if let Some(tag) = node.data.tags.first() {
-                        tag_colors.get(tag).copied().unwrap_or(Color::Gray)
-                    } else {
-                        Color::Gray
-                    }
-                }
-                NodeColorMode::Folder => folder_colors
-                    .get(&node.data.folder)
-                    .copied()
-                    .unwrap_or(Color::Gray),
-                NodeColorMode::LinkCount => {
-                    link_count_color(node.data.link_count, max_link_count, &colors.node_colors)
-                }
-                NodeColorMode::Uniform => {
-                    colors.node_colors.first().copied().unwrap_or(Color::Gray)
-                }
-            },
-        );
+    // Rebuild topology-dependent data if dirty
+    if cache.topology_dirty {
+        cache.rebuild_topology(graph, config, &colors, flags.show_legend);
     }
 
-    let edges: Vec<EdgeData> = graph
-        .edge_references()
-        .map(|edge| {
-            let src = &graph[edge.source()];
-            let tgt = &graph[edge.target()];
-            let color = match config.visual.edge_color_mode {
-                EdgeColorMode::Source => *node_own_color
-                    .get(&edge.source())
-                    .unwrap_or(&colors.edge_color),
-                EdgeColorMode::Target => *node_own_color
-                    .get(&edge.target())
-                    .unwrap_or(&colors.edge_color),
-                EdgeColorMode::Uniform => colors.edge_color,
-            };
-            EdgeData {
-                x1: src.location.x as f64,
-                y1: src.location.y as f64,
-                x2: tgt.location.x as f64,
-                y2: tgt.location.y as f64,
-                color,
-                thickness: config.visual.edge_thickness,
-            }
-        })
-        .collect();
+    // Fill position-dependent buffers (reuses Vec capacity across frames)
+    cache.fill_edges(graph, config, colors.edge_color);
+    cache.fill_nodes(
+        graph,
+        config,
+        state.selected_node,
+        colors.selected_indicator_color,
+    );
+    cache.fill_labels(graph, config, state.selected_node);
 
-    let nodes: Vec<NodeRenderData> = graph
-        .node_indices()
-        .map(|idx| {
-            let node = &graph[idx];
-            let primary_color = node_own_color.get(&idx).copied().unwrap_or(Color::Gray);
-            let radius = match config.visual.node_size_mode {
-                NodeSizeMode::Fixed => config.visual.node_size,
-                NodeSizeMode::LinkCount => {
-                    if max_link_count == 0 {
-                        config.visual.node_size
-                    } else {
-                        config.visual.node_size
-                            * (1.0 + (node.data.link_count as f64 / max_link_count as f64) * 1.5)
-                    }
-                }
-            };
-            let extra_tag_colors: Vec<Color> = if node.data.tags.is_empty() {
-                Vec::new()
-            } else {
-                node.data
-                    .tags
-                    .iter()
-                    .skip(1)
-                    .filter_map(|tag| tag_colors.get(tag).copied())
-                    .collect()
-            };
-            NodeRenderData {
-                x: node.location.x as f64,
-                y: node.location.y as f64,
-                color: primary_color,
-                radius,
-                extra_tag_colors,
-                is_selected: state.selected_node == Some(idx),
-                selection_ring_color: colors.selected_indicator_color,
-                shape: config.visual.node_shape,
-            }
-        })
-        .collect();
-
-    let labels: Vec<LabelData> = {
-        let should_show = |idx: NodeIndex| -> bool {
-            match config.visual.label_mode {
-                LabelMode::Selected => state.selected_node == Some(idx),
-                LabelMode::Neighbors => {
-                    if state.selected_node == Some(idx) {
-                        return true;
-                    }
-                    if let Some(sel) = state.selected_node {
-                        for edge in graph.edges(sel) {
-                            if edge.target() == idx || edge.source() == idx {
-                                return true;
-                            }
-                        }
-                    }
-                    false
-                }
-                LabelMode::All => true,
-                LabelMode::None => false,
-            }
-        };
-
-        graph
-            .node_indices()
-            .filter(|idx| should_show(*idx))
-            .map(|idx| {
-                let node = &graph[idx];
-                LabelData {
-                    x: node.location.x as f64,
-                    y: node.location.y as f64
-                        + radius_for_node(&nodes, idx)
-                        + config.visual.label_offset,
-                    text: crate::util::truncate(&node.data.title, config.visual.label_max_length),
-                }
-            })
-            .collect()
-    };
+    // Clone data for the Canvas paint closure (Fn requires data to be reusable)
+    let edges = cache.edges.clone();
+    let nodes = cache.nodes.clone();
+    let labels = cache.labels.clone();
 
     let node_count = graph.node_count();
     let edge_count = graph.edge_count();
@@ -496,7 +621,7 @@ pub fn draw_graph_view(
     frame.render_widget(canvas, area);
 
     // Draw legend overlay if data exists
-    if let Some(ref items) = legend_data {
+    if let Some(ref items) = cache.legend_data {
         let max_len = items.iter().map(|(t, _)| t.len()).max().unwrap_or(0);
         let legend_width = (max_len + 4) as u16;
         let legend_height = (items.len() as u16).min(config.legend.max_items as u16) + 2;
@@ -584,23 +709,25 @@ pub fn draw_graph_view(
     if flags.show_minimap {
         let minimap_area = compute_minimap_area(area, config);
         frame.render_widget(ratatui::widgets::Clear, minimap_area);
+        // Take the grid buffer out to avoid borrow conflict with node_colors
+        let mut minimap_grid = std::mem::take(&mut cache.minimap_grid);
         draw_minimap(
             frame,
             minimap_area,
             MinimapParams {
                 viewport,
                 graph,
-                node_colors: &node_own_color,
+                graph_bounds: state.graph_bounds,
+                node_colors: &cache.node_own_color,
                 colors: &colors,
-                config,
             },
+            &mut minimap_grid,
         );
+        // Put the grid buffer back (retains its capacity for next frame)
+        cache.minimap_grid = minimap_grid;
     }
 }
 
-fn radius_for_node(nodes: &[NodeRenderData], idx: NodeIndex) -> f64 {
-    nodes.get(idx.index()).map(|n| n.radius).unwrap_or(2.0)
-}
 
 fn draw_grid(
     ctx: &mut ratatui::widgets::canvas::Context,
@@ -687,100 +814,195 @@ pub fn compute_graph_bounds(
 struct MinimapParams<'a> {
     viewport: &'a Viewport,
     graph: &'a fdg_sim::ForceGraph<super::GraphNodeData, ()>,
+    graph_bounds: (f64, f64, f64, f64),
     node_colors: &'a HashMap<NodeIndex, Color>,
     colors: &'a crate::config::ThemeColors,
-    config: &'a crate::config::GrafConfig,
 }
 
-fn draw_minimap(frame: &mut ratatui::Frame, area: Rect, params: MinimapParams<'_>) {
-    let (wx_min, wx_max, wy_min, wy_max) = compute_graph_bounds(params.graph);
+/// Draw the minimap using half-block sub-cell rendering.
+///
+/// Each terminal cell represents 2 vertical sub-pixels via `▀`, `▄`, or `█`
+/// characters, giving 2× vertical resolution compared to one-char-per-cell.
+/// World coordinates are mapped to integer sub-pixel positions with floor+clamp
+/// — fully deterministic, no boundary rounding flicker.
+fn draw_minimap(frame: &mut ratatui::Frame, area: Rect, params: MinimapParams<'_>, grid: &mut Vec<Option<Color>>) {
+    let (wx_min, wx_max, wy_min, wy_max) = params.graph_bounds;
     let aspect = area.width as f64 / area.height as f64;
     let vp_x = params.viewport.x_bounds(aspect);
     let vp_y = params.viewport.y_bounds(aspect);
 
-    let nodes_clone: Vec<(f64, f64, Color)> = params
-        .graph
-        .node_indices()
-        .map(|idx| {
-            let node = &params.graph[idx];
-            let color = params.node_colors.get(&idx).copied().unwrap_or(Color::Gray);
-            (node.location.x as f64, node.location.y as f64, color)
-        })
-        .collect();
+    // Render the border block
+    let block = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .border_style(ratatui::style::Style::default().fg(params.colors.minimap_border_color));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    let vp_color = params.colors.minimap_viewport_color;
+    if inner.width == 0 || inner.height == 0 {
+        return;
+    }
+
+    let iw = inner.width as usize;
+    let ih = inner.height as usize;
+    let sub_h = ih * 2; // 2 vertical sub-pixels per cell
+    let world_w = wx_max - wx_min;
+    let world_h = wy_max - wy_min;
+
+    if world_w <= 0.0 || world_h <= 0.0 {
+        return;
+    }
+
+    // Map world coordinate to sub-pixel column (0-based, same as cell column)
+    let world_to_col = |x: f64| -> usize {
+        let t = (x - wx_min) / world_w;
+        let col = (t * iw as f64).floor() as isize;
+        col.clamp(0, (iw as isize) - 1) as usize
+    };
+
+    // Map world coordinate to sub-pixel row (0-based, y-inverted, 2× resolution)
+    let world_to_subrow = |y: f64| -> usize {
+        let t = (wy_max - y) / world_h;
+        let row = (t * sub_h as f64).floor() as isize;
+        row.clamp(0, (sub_h as isize) - 1) as usize
+    };
+
+    // Map world coordinate to cell row (for viewport rectangle)
+    let world_to_row = |y: f64| -> usize {
+        let t = (wy_max - y) / world_h;
+        let row = (t * ih as f64).floor() as isize;
+        row.clamp(0, (ih as isize) - 1) as usize
+    };
+
+    // Reuse sub-pixel grid buffer: resize if needed, then clear
+    let grid_size = sub_h * iw;
+    grid.resize(grid_size, None);
+    grid.fill(None);
+
+    // Plot nodes into the sub-pixel grid
+    for idx in params.graph.node_indices() {
+        let node = &params.graph[idx];
+        let nx = node.location.x as f64;
+        let ny = node.location.y as f64;
+        let col = world_to_col(nx);
+        let sub_row = world_to_subrow(ny);
+        let color = params.node_colors.get(&idx).copied().unwrap_or(Color::Gray);
+        grid[sub_row * iw + col] = Some(color);
+    }
+
+    let buf = frame.buffer_mut();
     let bg_color = params.colors.minimap_bg_color;
 
-    let canvas = Canvas::default()
-        .x_bounds([wx_min, wx_max])
-        .y_bounds([wy_min, wy_max])
-        .block(
-            ratatui::widgets::Block::default()
-                .borders(ratatui::widgets::Borders::ALL)
-                .border_style(
-                    ratatui::style::Style::default().fg(params.colors.minimap_border_color),
-                ),
-        )
-        .marker(ratatui::symbols::Marker::from(
-            params.config.visual.minimap_marker.clone(),
-        ))
-        .paint(move |ctx| {
-            if let Some(bg) = bg_color {
-                ctx.draw(&Rectangle {
-                    x: wx_min,
-                    y: wy_min,
-                    width: wx_max - wx_min,
-                    height: wy_max - wy_min,
-                    color: bg,
-                });
+    // Composite sub-pixel grid into half-block characters
+    for cell_row in 0..ih {
+        let top_sub = cell_row * 2;
+        let bot_sub = cell_row * 2 + 1;
+        for col in 0..iw {
+            let top_color = grid[top_sub * iw + col];
+            let bot_color = grid[bot_sub * iw + col];
+
+            let x = inner.x + col as u16;
+            let y = inner.y + cell_row as u16;
+
+            let cell = match buf.cell_mut((x, y)) {
+                Some(c) => c,
+                None => continue,
+            };
+
+            match (top_color, bot_color) {
+                (None, None) => {
+                    // Empty cell — set background if configured
+                    if let Some(bg) = bg_color {
+                        cell.set_symbol(" ");
+                        cell.set_style(ratatui::style::Style::default().bg(bg));
+                    }
+                }
+                (Some(tc), None) => {
+                    // Only top sub-pixel set: upper half block
+                    cell.set_symbol("▀");
+                    let mut style = ratatui::style::Style::default().fg(tc);
+                    if let Some(bg) = bg_color {
+                        style = style.bg(bg);
+                    }
+                    cell.set_style(style);
+                }
+                (None, Some(bc)) => {
+                    // Only bottom sub-pixel set: lower half block
+                    cell.set_symbol("▄");
+                    let mut style = ratatui::style::Style::default().fg(bc);
+                    if let Some(bg) = bg_color {
+                        style = style.bg(bg);
+                    }
+                    cell.set_style(style);
+                }
+                (Some(tc), Some(bc)) => {
+                    // Both sub-pixels set: lower half block with fg=bottom, bg=top
+                    cell.set_symbol("▄");
+                    cell.set_style(ratatui::style::Style::default().fg(bc).bg(tc));
+                }
             }
+        }
+    }
 
-            for (nx, ny, nc) in &nodes_clone {
-                ctx.draw(&Rectangle {
-                    x: *nx - 0.5,
-                    y: *ny - 0.5,
-                    width: 1.0,
-                    height: 1.0,
-                    color: *nc,
-                });
-            }
+    // Compute viewport rectangle cell bounds
+    let vp_col_min = world_to_col(vp_x[0].max(wx_min));
+    let vp_col_max = world_to_col(vp_x[1].min(wx_max));
+    let vp_row_min = world_to_row(vp_y[1].min(wy_max)); // y inverted: max y → min row
+    let vp_row_max = world_to_row(vp_y[0].max(wy_min)); // min y → max row
 
-            let vx1 = vp_x[0].max(wx_min);
-            let vx2 = vp_x[1].min(wx_max);
-            let vy1 = vp_y[0].max(wy_min);
-            let vy2 = vp_y[1].min(wy_max);
+    if vp_col_min >= vp_col_max || vp_row_min >= vp_row_max {
+        return;
+    }
 
-            if vx1 < vx2 && vy1 < vy2 {
-                ctx.draw(&Line {
-                    x1: vx1,
-                    y1: vy1,
-                    x2: vx2,
-                    y2: vy1,
-                    color: vp_color,
-                });
-                ctx.draw(&Line {
-                    x1: vx1,
-                    y1: vy2,
-                    x2: vx2,
-                    y2: vy2,
-                    color: vp_color,
-                });
-                ctx.draw(&Line {
-                    x1: vx1,
-                    y1: vy1,
-                    x2: vx1,
-                    y2: vy2,
-                    color: vp_color,
-                });
-                ctx.draw(&Line {
-                    x1: vx2,
-                    y1: vy1,
-                    x2: vx2,
-                    y2: vy2,
-                    color: vp_color,
-                });
-            }
-        });
+    let vp_style = ratatui::style::Style::default().fg(params.colors.minimap_viewport_color);
 
-    frame.render_widget(canvas, area);
+    // Draw horizontal edges of viewport rectangle
+    for col in vp_col_min..=vp_col_max {
+        let x = inner.x + col as u16;
+        // Top edge
+        let y_top = inner.y + vp_row_min as u16;
+        if let Some(cell) = buf.cell_mut((x, y_top)) {
+            cell.set_symbol("─");
+            cell.set_style(vp_style);
+        }
+        // Bottom edge
+        let y_bot = inner.y + vp_row_max as u16;
+        if let Some(cell) = buf.cell_mut((x, y_bot)) {
+            cell.set_symbol("─");
+            cell.set_style(vp_style);
+        }
+    }
+
+    // Draw vertical edges of viewport rectangle
+    for row in vp_row_min..=vp_row_max {
+        let y = inner.y + row as u16;
+        // Left edge
+        let x_left = inner.x + vp_col_min as u16;
+        if let Some(cell) = buf.cell_mut((x_left, y)) {
+            cell.set_symbol("│");
+            cell.set_style(vp_style);
+        }
+        // Right edge
+        let x_right = inner.x + vp_col_max as u16;
+        if let Some(cell) = buf.cell_mut((x_right, y)) {
+            cell.set_symbol("│");
+            cell.set_style(vp_style);
+        }
+    }
+
+    // Draw corners (after edges so they overwrite)
+    let corners: [(usize, usize, &str); 4] = [
+        (vp_col_min, vp_row_min, "┌"),
+        (vp_col_max, vp_row_min, "┐"),
+        (vp_col_min, vp_row_max, "└"),
+        (vp_col_max, vp_row_max, "┘"),
+    ];
+    for (col, row, sym) in corners {
+        let x = inner.x + col as u16;
+        let y = inner.y + row as u16;
+        if let Some(cell) = buf.cell_mut((x, y)) {
+            cell.set_symbol(sym);
+            cell.set_style(vp_style);
+        }
+    }
 }
+

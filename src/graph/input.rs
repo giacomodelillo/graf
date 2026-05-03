@@ -18,6 +18,7 @@ pub enum GraphAction {
     ToggleLegend,
     ToggleGrid,
     ToggleStatus,
+    ReloadConfig,
     Refresh,
 }
 
@@ -28,26 +29,34 @@ pub fn handle_graph_keys(
 ) -> Option<GraphAction> {
     let mut guard = state.write().unwrap_or_else(|e| e.into_inner());
 
+    let ctrl = key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL);
+
     match key.code {
         crossterm::event::KeyCode::Esc | crossterm::event::KeyCode::Char('q') => {
             return Some(GraphAction::Quit);
         }
-        crossterm::event::KeyCode::Up => {
+        crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k') if !ctrl => {
             select_in_direction(&mut guard, 0.0, 1.0);
         }
-        crossterm::event::KeyCode::Down => {
+        crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j') if !ctrl => {
             select_in_direction(&mut guard, 0.0, -1.0);
         }
-        crossterm::event::KeyCode::Left => {
+        crossterm::event::KeyCode::Left | crossterm::event::KeyCode::Char('h') if !ctrl => {
             select_in_direction(&mut guard, -1.0, 0.0);
         }
-        crossterm::event::KeyCode::Right => {
+        crossterm::event::KeyCode::Right | crossterm::event::KeyCode::Char('l') if !ctrl => {
             select_in_direction(&mut guard, 1.0, 0.0);
         }
         crossterm::event::KeyCode::Char('+') | crossterm::event::KeyCode::Char('=') => {
             guard.viewport.zoom_in(config.interaction.zoom_factor);
         }
+        crossterm::event::KeyCode::Char('j') if ctrl => {
+            guard.viewport.zoom_in(config.interaction.zoom_factor);
+        }
         crossterm::event::KeyCode::Char('-') => {
+            guard.viewport.zoom_out(config.interaction.zoom_factor);
+        }
+        crossterm::event::KeyCode::Char('k') if ctrl => {
             guard.viewport.zoom_out(config.interaction.zoom_factor);
         }
         crossterm::event::KeyCode::Enter => {
@@ -62,6 +71,9 @@ pub fn handle_graph_keys(
                 config.interaction.auto_fit_padding,
             );
             guard.viewport = vp;
+        }
+        crossterm::event::KeyCode::Char('r') if ctrl => {
+            return Some(GraphAction::ReloadConfig);
         }
         crossterm::event::KeyCode::Char('r') => {
             return Some(GraphAction::Refresh);

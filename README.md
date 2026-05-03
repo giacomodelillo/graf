@@ -118,7 +118,7 @@ EDITOR=nvim graf
 
 | Key | Action |
 |-----|--------|
-| `↑` `↓` `←` `→` / `k` `j` `h` `l` | Pan view |
+| `↑` `↓` `←` `→` / `k` `j` `h` `l` | Move between nodes |
 | `+` `=` / `Ctrl+J` | Zoom in |
 | `-` / `Ctrl+K` | Zoom out |
 | `Enter` | Open selected file in editor |

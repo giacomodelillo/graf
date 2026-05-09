@@ -5,6 +5,8 @@ A terminal-based force-directed graph visualizer for markdown wikilinks. Run `gr
 # DISCLAIMER
 `graf` is originally meant to be a feature for my main project `clin-rs`. When this project is fully developed it will be merged with the `clin-rs` project as a "graph view" feature. Currently **all the big features are implemented** and only the testing, bugfixing phase remains. So please create a issue for any problem you encounter using `graf`!
 
+> Part of **[clin-rs](https://github.com/reekta92/clin-rs)**
+
 # Plans
 - [X] Custom themes
 - [X] Hot reloading the config
@@ -13,8 +15,6 @@ A terminal-based force-directed graph visualizer for markdown wikilinks. Run `gr
 > - [ ] Obsidian single mode: similar to Obsidian mode but instead of creating graph of different files and their connections, creates graph of a single file(god node) and headlines as nodes
 > - [ ] Coding mode: creates a graf of a project by assigning the source files as god nodes and codeblocks inside them are nodes connected to it
 > - [ ] Org mode: same logic as Obsidian mode but for `.org` files
-
-> Part of **[clin-rs](https://github.com/reekta92/clin-rs)**
 
 # Showcase
 <table>
